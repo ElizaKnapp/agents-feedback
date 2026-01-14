@@ -20,11 +20,12 @@ function isBlank(v) {
 }
 
 function detectIdentifierCols(headers) {
-  // Exclude Q/R/Expected columns - these are chat content, not metadata
+  // Exclude Q/R/N/Expected columns - these are chat content, not metadata
   return headers.filter((h) => {
     const normalized = h.trim();
     return !/^Q\d+$/i.test(normalized) && 
            !/^R\d+$/i.test(normalized) && 
+           !/^N\d+$/i.test(normalized) &&
            !/^Expected$/i.test(normalized) &&
            !/^Expected_\d+$/i.test(normalized) &&
            !/^Expected\d+$/i.test(normalized);
@@ -32,8 +33,8 @@ function detectIdentifierCols(headers) {
 }
 
 function rowToMessages(row) {
-  // Dynamically consume Q1/R1/Expected, Q2/R2/Expected, ...
-  // Expected appears after each R, so pattern is: Q1, R1, Expected, Q2, R2, Expected, ...
+  // Dynamically consume Q1/R1/N1/Expected, Q2/R2/N2/Expected, ...
+  // Pattern is: Q1, R1, N1, Expected, Q2, R2, N2, Expected, ...
   // SheetJS handles duplicate column names as: Expected, Expected_1, Expected_2, etc.
   // So Expected corresponds to R1, Expected_1 to R2, Expected_2 to R3, etc.
   const msgs = [];
@@ -41,8 +42,9 @@ function rowToMessages(row) {
   while (true) {
     const q = row[`Q${k}`];
     const r = row[`R${k}`];
+    const n = row[`N${k}`];
 
-    // stop if both missing/blank AND there is no higher pair
+    // stop if both Q and R missing/blank AND there is no higher pair
     if (isBlank(q) && isBlank(r)) {
       // lookahead: if next pair also blank, break; otherwise skip gap
       const qn = row[`Q${k + 1}`];
@@ -52,13 +54,18 @@ function rowToMessages(row) {
       continue;
     }
 
-    if (!isBlank(q)) msgs.push({ role: "user", text: String(q), expected: null });
+    if (!isBlank(q)) msgs.push({ role: "user", text: String(q), expected: null, note: null });
     
-    // For responses, find the corresponding Expected value
+    // For responses, find the corresponding Note and Expected value
     let expectedValue = null;
+    let noteValue = null;
     if (!isBlank(r)) {
+      // Get the note (N1, N2, etc.)
+      if (!isBlank(n)) {
+        noteValue = String(n).trim();
+      }
+      
       // Pattern: Expected for R1, Expected_1 for R2, Expected_2 for R3, etc.
-      // Also try Expected{k} pattern (Expected1, Expected2) as fallback
       if (k === 1) {
         // First Expected column (no suffix)
         const expectedFirst = row[`Expected`];
@@ -84,7 +91,8 @@ function rowToMessages(row) {
       msgs.push({ 
         role: "assistant", 
         text: String(r),
-        expected: expectedValue
+        expected: expectedValue,
+        note: noteValue
       });
     }
     k++;
@@ -341,6 +349,25 @@ function renderChat(row) {
 
     bubble.appendChild(role);
     bubble.appendChild(text);
+
+    // Add note for assistant messages if present
+    if (m.role === "assistant" && m.note !== null && m.note !== undefined && String(m.note).trim() !== "") {
+      const noteContainer = document.createElement("div");
+      noteContainer.className = "note-container";
+      
+      const noteLabel = document.createElement("span");
+      noteLabel.className = "note-label";
+      noteLabel.textContent = "Note:";
+      
+      const noteText = document.createElement("span");
+      noteText.className = "note-text";
+      noteText.textContent = String(m.note).trim();
+      
+      noteContainer.appendChild(noteLabel);
+      noteContainer.appendChild(noteText);
+      bubble.appendChild(noteContainer);
+    }
+
     chat.appendChild(bubble);
   });
 
