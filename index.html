@@ -8,11 +8,12 @@
 
     <!-- SheetJS (xlsx) for parsing Excel in-browser -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
   </head>
 
   <body>
     <header class="topbar">
-      <button id="downloadBtn" class="btn secondary" disabled>Download Excel</button>
       <div class="brand">Excel → Chat Viewer</div>
       <label class="filebtn">
         <input id="fileInput" type="file" accept=".xlsx,.xls" />
@@ -20,39 +21,48 @@
       </label>
 
       <select id="sheetSelect" class="select" title="Sheet" disabled></select>
+
+      <div class="spacer"></div>
+
+      <button id="downloadBtn" class="btn secondary" disabled>Download Excel</button>
     </header>
 
     <main class="layout">
       <aside class="sidebar">
         <div class="panel">
-          <h3>Add Chat</h3>
-          <form id="addChatForm">
-            <div class="form-group">
-              <label for="location">Location</label>
-              <select id="location" required>
-                <option value="">Select...</option>
-                <option value="Development">Development</option>
-                <option value="Production">Production</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="userEmail">User Email</label>
-              <input type="email" id="userEmail" required />
-            </div>
-            <div class="form-group">
-              <label for="apiKey">Api Key</label>
-              <input type="text" id="apiKey" required />
-            </div>
-            <div class="form-group">
-              <label for="projectId">Project Id</label>
-              <input type="text" id="projectId" required />
-            </div>
-            <div class="form-group">
-              <label for="chatId">Chat Id</label>
-              <input type="text" id="chatId" required />
-            </div>
-            <button type="submit" class="btn" id="addChatBtn">Add Chat</button>
-          </form>
+          <div class="panel-header-collapsible">
+            <h3>Add Chat</h3>
+            <button class="collapse-btn" id="addChatToggle">−</button>
+          </div>
+          <div id="addChatFormContainer">
+            <form id="addChatForm">
+              <div class="form-group">
+                <label for="location">Location</label>
+                <select id="location" required>
+                  <option value="">Select...</option>
+                  <option value="Development">Development</option>
+                  <option value="Production">Production</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="userEmail">User Email</label>
+                <input type="email" id="userEmail" required />
+              </div>
+              <div class="form-group">
+                <label for="apiKey">Api Key</label>
+                <input type="text" id="apiKey" required />
+              </div>
+              <div class="form-group">
+                <label for="projectId">Project Id</label>
+                <input type="text" id="projectId" required />
+              </div>
+              <div class="form-group">
+                <label for="chatId">Chat Id</label>
+                <input type="text" id="chatId" required />
+              </div>
+              <button type="submit" class="btn" id="addChatBtn">Add Chat</button>
+            </form>
+          </div>
         </div>
 
         <div class="panel">

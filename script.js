@@ -390,7 +390,23 @@ function renderChat(row) {
 
     const text = document.createElement("div");
     text.className = "message-text";
-    text.textContent = m.text;
+    
+    // Render markdown for assistant messages, plain text for user messages
+    if (m.role === "assistant") {
+      if (typeof marked !== "undefined" && marked.parse) {
+        try {
+          text.innerHTML = marked.parse(m.text);
+        } catch (e) {
+          // Fallback to plain text if markdown parsing fails
+          text.textContent = m.text;
+        }
+      } else {
+        // Fallback if marked is not loaded
+        text.textContent = m.text;
+      }
+    } else {
+      text.textContent = m.text;
+    }
 
     bubble.appendChild(role);
     bubble.appendChild(text);
@@ -688,8 +704,9 @@ addChatForm.addEventListener("submit", async (e) => {
     renderRowList(filteredRows);
     renderChat(newRow);
     
-    // Reset form
-    addChatForm.reset();
+    // Clear only projectId and chatId, keep other fields
+    el("projectId").value = "";
+    el("chatId").value = "";
     
     // Enable download button
     downloadBtn.disabled = false;
@@ -705,3 +722,19 @@ addChatForm.addEventListener("submit", async (e) => {
 
 // --- Download button ---
 downloadBtn.addEventListener("click", downloadExcel);
+
+// --- Collapsible Add Chat form ---
+const addChatToggle = el("addChatToggle");
+const addChatFormContainer = el("addChatFormContainer");
+let addChatFormExpanded = true;
+
+addChatToggle.addEventListener("click", () => {
+  addChatFormExpanded = !addChatFormExpanded;
+  if (addChatFormExpanded) {
+    addChatFormContainer.style.display = "block";
+    addChatToggle.textContent = "−";
+  } else {
+    addChatFormContainer.style.display = "none";
+    addChatToggle.textContent = "+";
+  }
+});
