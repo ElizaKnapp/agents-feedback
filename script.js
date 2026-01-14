@@ -4,6 +4,7 @@ let filteredRows = [];
 let identifierCols = [];
 let sheetNames = [];
 let currentSheet = null;
+let nextId = 1; // Track next ID for new chats
 
 const el = (id) => document.getElementById(id);
 
@@ -13,6 +14,8 @@ const filtersDiv = el("filters");
 const rowList = el("rowList");
 const chat = el("chat");
 const meta = el("meta");
+const addChatForm = el("addChatForm");
+const downloadBtn = el("downloadBtn");
 
 // --- Helpers ---
 function isBlank(v) {
@@ -92,7 +95,8 @@ function rowToMessages(row) {
         role: "assistant", 
         text: String(r),
         expected: expectedValue,
-        note: noteValue
+        note: noteValue,
+        exchangeIndex: k - 1 // Track which exchange this is (0-indexed)
       });
     }
     k++;
@@ -325,22 +329,63 @@ function renderChat(row) {
     role.className = "role";
     role.textContent = m.role === "user" ? "User" : "Assistant";
     
-    // Add Expected indicator for assistant messages
-    if (m.role === "assistant" && m.expected !== null && m.expected !== undefined && String(m.expected).trim() !== "") {
-      const expectedLabel = document.createElement("span");
-      expectedLabel.className = "expected-label";
-      const expectedLower = String(m.expected).toLowerCase().trim();
-      if (expectedLower === "yes") {
-        expectedLabel.textContent = "✓ Expected";
-        expectedLabel.classList.add("expected-yes-label");
-      } else if (expectedLower === "no") {
-        expectedLabel.textContent = "✗ Unexpected";
-        expectedLabel.classList.add("expected-no-label");
+    // Add Expected indicator for assistant messages (editable)
+    if (m.role === "assistant") {
+      const expectedSelect = document.createElement("select");
+      expectedSelect.className = "expected-select";
+      expectedSelect.dataset.exchangeIndex = m.exchangeIndex;
+      
+      const options = [
+        { value: "", text: "Not Set" },
+        { value: "Yes", text: "✓ Expected" },
+        { value: "No", text: "✗ Unexpected" }
+      ];
+      
+      const currentExpected = m.expected !== null && m.expected !== undefined ? String(m.expected).trim() : "";
+      options.forEach(opt => {
+        const option = document.createElement("option");
+        option.value = opt.value;
+        option.textContent = opt.text;
+        if (currentExpected.toLowerCase() === opt.value.toLowerCase()) {
+          option.selected = true;
+        }
+        expectedSelect.appendChild(option);
+      });
+      
+      // Apply styling based on current value
+      if (currentExpected.toLowerCase() === "yes") {
+        expectedSelect.classList.add("expected-yes-label");
+      } else if (currentExpected.toLowerCase() === "no") {
+        expectedSelect.classList.add("expected-no-label");
       } else {
-        expectedLabel.textContent = `Expected: ${m.expected}`;
-        expectedLabel.classList.add("expected-unknown-label");
+        expectedSelect.classList.add("expected-unknown-label");
       }
-      role.appendChild(expectedLabel);
+      
+      expectedSelect.addEventListener("change", () => {
+        updateExpectedInRow(row, m.exchangeIndex, expectedSelect.value);
+        // Update styling
+        expectedSelect.className = "expected-select";
+        if (expectedSelect.value.toLowerCase() === "yes") {
+          expectedSelect.classList.add("expected-yes-label");
+        } else if (expectedSelect.value.toLowerCase() === "no") {
+          expectedSelect.classList.add("expected-no-label");
+        } else {
+          expectedSelect.classList.add("expected-unknown-label");
+        }
+        // Update bubble color
+        const bubbleEl = expectedSelect.closest(".bubble");
+        bubbleEl.className = "bubble assistant";
+        if (expectedSelect.value.toLowerCase() === "yes") {
+          bubbleEl.classList.add("expected-yes");
+        } else if (expectedSelect.value.toLowerCase() === "no") {
+          bubbleEl.classList.add("expected-no");
+        } else {
+          bubbleEl.classList.add("expected-unknown");
+        }
+        // Note container colors are handled by bubble class CSS
+      });
+      
+      role.appendChild(expectedSelect);
     }
 
     const text = document.createElement("div");
@@ -350,8 +395,8 @@ function renderChat(row) {
     bubble.appendChild(role);
     bubble.appendChild(text);
 
-    // Add note for assistant messages if present
-    if (m.role === "assistant" && m.note !== null && m.note !== undefined && String(m.note).trim() !== "") {
+    // Add note for assistant messages (always editable)
+    if (m.role === "assistant") {
       const noteContainer = document.createElement("div");
       noteContainer.className = "note-container";
       
@@ -359,9 +404,18 @@ function renderChat(row) {
       noteLabel.className = "note-label";
       noteLabel.textContent = "Note:";
       
-      const noteText = document.createElement("span");
-      noteText.className = "note-text";
-      noteText.textContent = String(m.note).trim();
+      const noteText = document.createElement("textarea");
+      noteText.className = "note-text editable-note";
+      noteText.value = m.note !== null && m.note !== undefined ? String(m.note).trim() : "";
+      noteText.placeholder = "Add a note...";
+      noteText.rows = 2;
+      
+      // Store row reference and exchange index for editing
+      noteText.dataset.exchangeIndex = m.exchangeIndex;
+      
+      noteText.addEventListener("blur", () => {
+        updateNoteInRow(row, m.exchangeIndex, noteText.value);
+      });
       
       noteContainer.appendChild(noteLabel);
       noteContainer.appendChild(noteText);
@@ -412,9 +466,23 @@ function loadSheet(wb, sheetName) {
   const headers = json.length ? Object.keys(json[0]) : [];
   identifierCols = detectIdentifierCols(headers);
 
+  // Find max ID to set nextId
+  if (allRows.length > 0) {
+    const ids = allRows
+      .map(r => {
+        const id = r["Id"] || r["ID"];
+        return id ? parseInt(id) : 0;
+      })
+      .filter(id => !isNaN(id));
+    nextId = ids.length > 0 ? Math.max(...ids) + 1 : 1;
+  } else {
+    nextId = 1;
+  }
+
   buildFilters();
   activeIndex = null;
   applyAll();
+  downloadBtn.disabled = false;
 }
 
 function applyAll(keepSelection = false) {
@@ -424,3 +492,216 @@ function applyAll(keepSelection = false) {
   if (!keepSelection) activeIndex = null;
   renderRowList(filteredRows);
 }
+
+// --- Update functions for editing ---
+function updateNoteInRow(row, exchangeIndex, noteValue) {
+  // exchangeIndex is 0-based, but columns are 1-based (N1, N2, etc.)
+  const columnName = `N${exchangeIndex + 1}`;
+  row[columnName] = noteValue;
+  // Trigger download button update
+  downloadBtn.disabled = false;
+}
+
+function updateExpectedInRow(row, exchangeIndex, expectedValue) {
+  // exchangeIndex is 0-based
+  let columnName;
+  if (exchangeIndex === 0) {
+    columnName = "Expected";
+  } else {
+    columnName = `Expected_${exchangeIndex}`;
+  }
+  row[columnName] = expectedValue;
+  // Trigger download button update
+  downloadBtn.disabled = false;
+}
+
+// --- API Integration ---
+async function fetchChatExchanges(location, userEmail, apiKey, projectId, chatId) {
+  const baseUrl = location === "Development" 
+    ? "https://dev-api.ikigailabs.io" 
+    : "https://api.ikigailabs.io";
+  
+  const url = `${baseUrl}/component/get-exchanges-for-chat?project_id=${projectId}&chat_id=${chatId}`;
+  
+  const headers = {
+    'User': userEmail,
+    'Api-key': apiKey,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching exchanges:", error);
+    throw error;
+  }
+}
+
+function exchangesToRow(exchanges, location, userEmail, projectId, chatId) {
+  // Sort exchanges by created_at (earliest to latest)
+  const sortedExchanges = [...exchanges].sort((a, b) => {
+    const timeA = parseInt(a.created_at) || 0;
+    const timeB = parseInt(b.created_at) || 0;
+    return timeA - timeB;
+  });
+
+  // Create new row - use current date as text (not Excel date number)
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  
+  const newRow = {
+    "Id": nextId++,
+    "Priority": "None",
+    "Project Name": "",
+    "Project Description": "",
+    "Date": dateStr,
+    "Location Run": location,
+    "User Email": userEmail,
+    "Project Id": projectId,
+    "Chat Id": chatId,
+    "Note": ""
+  };
+
+  // Add Q/R/N/Expected pairs
+  sortedExchanges.forEach((exchange, index) => {
+    const k = index + 1;
+    newRow[`Q${k}`] = exchange.query || "";
+    newRow[`R${k}`] = exchange.response || "";
+    newRow[`N${k}`] = ""; // Notes start empty
+    if (k === 1) {
+      newRow["Expected"] = "";
+    } else {
+      newRow[`Expected_${k - 1}`] = "";
+    }
+  });
+
+  return newRow;
+}
+
+// --- Download Excel ---
+function downloadExcel() {
+  if (allRows.length === 0) {
+    alert("No data to download");
+    return;
+  }
+
+  // Create workbook
+  const wb = XLSX.utils.book_new();
+  
+  // Get all unique column names from all rows
+  const allColumns = new Set();
+  allRows.forEach(row => {
+    Object.keys(row).forEach(key => allColumns.add(key));
+  });
+  
+  // Ensure standard columns are first
+  const standardCols = ["Id", "Priority", "Project Name", "Project Description", "Date", 
+                         "Location Run", "User Email", "Project Id", "Chat Id", "Note"];
+  const otherCols = Array.from(allColumns).filter(col => !standardCols.includes(col));
+  
+  // Sort Q/R/N/Expected columns properly
+  const qCols = otherCols.filter(c => /^Q\d+$/i.test(c)).sort((a, b) => {
+    const numA = parseInt(a.match(/\d+/)[0]);
+    const numB = parseInt(b.match(/\d+/)[0]);
+    return numA - numB;
+  });
+  const rCols = otherCols.filter(c => /^R\d+$/i.test(c)).sort((a, b) => {
+    const numA = parseInt(a.match(/\d+/)[0]);
+    const numB = parseInt(b.match(/\d+/)[0]);
+    return numA - numB;
+  });
+  const nCols = otherCols.filter(c => /^N\d+$/i.test(c)).sort((a, b) => {
+    const numA = parseInt(a.match(/\d+/)[0]);
+    const numB = parseInt(b.match(/\d+/)[0]);
+    return numA - numB;
+  });
+  const expectedCols = otherCols.filter(c => /^Expected/i.test(c)).sort((a, b) => {
+    if (a === "Expected") return -1;
+    if (b === "Expected") return 1;
+    const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+    const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+    return numA - numB;
+  });
+  
+  // Interleave Q/R/N/Expected columns
+  const maxPairs = Math.max(qCols.length, rCols.length, nCols.length);
+  const interleavedCols = [];
+  for (let i = 0; i < maxPairs; i++) {
+    if (qCols[i]) interleavedCols.push(qCols[i]);
+    if (rCols[i]) interleavedCols.push(rCols[i]);
+    if (nCols[i]) interleavedCols.push(nCols[i]);
+    if (i === 0 && expectedCols.find(c => c === "Expected")) {
+      interleavedCols.push("Expected");
+    } else if (expectedCols.find(c => c === `Expected_${i}`)) {
+      interleavedCols.push(`Expected_${i}`);
+    }
+  }
+  
+  const orderedColumns = [...standardCols, ...interleavedCols];
+  
+  // Convert rows to array of arrays
+  const wsData = [orderedColumns]; // Header row
+  allRows.forEach(row => {
+    const rowData = orderedColumns.map(col => row[col] || "");
+    wsData.push(rowData);
+  });
+  
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(wb, ws, currentSheet || "Sheet1");
+  
+  // Download
+  XLSX.writeFile(wb, "chat-data.xlsx");
+}
+
+// --- Form submission ---
+addChatForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  
+  const location = el("location").value;
+  const userEmail = el("userEmail").value;
+  const apiKey = el("apiKey").value;
+  const projectId = el("projectId").value;
+  const chatId = el("chatId").value;
+  
+  const addChatBtn = el("addChatBtn");
+  addChatBtn.disabled = true;
+  addChatBtn.textContent = "Loading...";
+  
+  try {
+    const data = await fetchChatExchanges(location, userEmail, apiKey, projectId, chatId);
+    const newRow = exchangesToRow(data.exchanges || [], location, userEmail, projectId, chatId);
+    
+    // Add to allRows
+    allRows.push(newRow);
+    
+    // Refresh filters and row list
+    buildFilters();
+    applyAll();
+    
+    // Select the new row
+    activeIndex = filteredRows.length - 1;
+    renderRowList(filteredRows);
+    renderChat(newRow);
+    
+    // Reset form
+    addChatForm.reset();
+    
+    // Enable download button
+    downloadBtn.disabled = false;
+    
+    alert("Chat added successfully!");
+  } catch (error) {
+    alert(`Error adding chat: ${error.message}`);
+  } finally {
+    addChatBtn.disabled = false;
+    addChatBtn.textContent = "Add Chat";
+  }
+});
+
+// --- Download button ---
+downloadBtn.addEventListener("click", downloadExcel);
