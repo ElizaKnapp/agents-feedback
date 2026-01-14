@@ -319,7 +319,7 @@
   
   /* Markdown styling for assistant messages */
   .bubble.assistant .message-text {
-    line-height: 1.6;
+    line-height: 1.5;
   }
   
   .bubble.assistant .message-text h1,
@@ -328,8 +328,8 @@
   .bubble.assistant .message-text h4,
   .bubble.assistant .message-text h5,
   .bubble.assistant .message-text h6 {
-    margin-top: 1em;
-    margin-bottom: 0.5em;
+    margin-top: 0.75em;
+    margin-bottom: 0.35em;
     font-weight: 600;
     color: inherit;
   }
@@ -338,18 +338,35 @@
   .bubble.assistant .message-text h2 { font-size: 1.3em; }
   .bubble.assistant .message-text h3 { font-size: 1.1em; }
   
+  .bubble.assistant .message-text h1:first-child,
+  .bubble.assistant .message-text h2:first-child,
+  .bubble.assistant .message-text h3:first-child,
+  .bubble.assistant .message-text h4:first-child,
+  .bubble.assistant .message-text h5:first-child,
+  .bubble.assistant .message-text h6:first-child {
+    margin-top: 0;
+  }
+  
   .bubble.assistant .message-text p {
-    margin: 0.5em 0;
+    margin: 0.35em 0;
+  }
+  
+  .bubble.assistant .message-text p:first-child {
+    margin-top: 0;
+  }
+  
+  .bubble.assistant .message-text p:last-child {
+    margin-bottom: 0;
   }
   
   .bubble.assistant .message-text ul,
   .bubble.assistant .message-text ol {
-    margin: 0.5em 0;
+    margin: 0.35em 0;
     padding-left: 1.5em;
   }
   
   .bubble.assistant .message-text li {
-    margin: 0.25em 0;
+    margin: 0.15em 0;
   }
   
   .bubble.assistant .message-text code {
@@ -362,10 +379,10 @@
   
   .bubble.assistant .message-text pre {
     background: rgba(0, 0, 0, 0.3);
-    padding: 10px;
+    padding: 8px;
     border-radius: 6px;
     overflow-x: auto;
-    margin: 0.5em 0;
+    margin: 0.35em 0;
   }
   
   .bubble.assistant .message-text pre code {
@@ -384,8 +401,12 @@
   .bubble.assistant .message-text blockquote {
     border-left: 3px solid rgba(255, 255, 255, 0.3);
     padding-left: 1em;
-    margin: 0.5em 0;
+    margin: 0.35em 0;
     color: rgba(229, 231, 235, 0.8);
+  }
+  
+  .bubble.assistant .message-text br {
+    line-height: 1.2;
   }
   
   .note-container {
