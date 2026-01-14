@@ -19,6 +19,7 @@ const chat = el("chat");
 const meta = el("meta");
 const sortSelect = el("sortSelect");
 const sortDirBtn = el("sortDirBtn");
+const metadataToggleBtn = el("metadataToggleBtn");
 
 // --- Helpers ---
 function isBlank(v) {
@@ -26,12 +27,20 @@ function isBlank(v) {
 }
 
 function detectIdentifierCols(headers) {
-  // Treat anything not Qk/Rk as "identifier"
-  return headers.filter((h) => !/^Q\d+$/i.test(h) && !/^R\d+$/i.test(h));
+  // Exclude Q/R/Expected columns - these are chat content, not metadata
+  return headers.filter((h) => {
+    const normalized = h.trim();
+    return !/^Q\d+$/i.test(normalized) && 
+           !/^R\d+$/i.test(normalized) && 
+           !/^Expected$/i.test(normalized);
+  });
 }
 
 function rowToMessages(row) {
-  // Dynamically consume Q1/R1, Q2/R2, ...
+  // Dynamically consume Q1/R1/Expected, Q2/R2/Expected, ...
+  // Expected appears after each R, so pattern is: Q1, R1, Expected, Q2, R2, Expected, ...
+  // SheetJS handles duplicate column names as: Expected, Expected_1, Expected_2, etc.
+  // So Expected corresponds to R1, Expected_1 to R2, Expected_2 to R3, etc.
   const msgs = [];
   let k = 1;
   while (true) {
@@ -48,17 +57,51 @@ function rowToMessages(row) {
       continue;
     }
 
-    if (!isBlank(q)) msgs.push({ role: "user", text: String(q) });
-    if (!isBlank(r)) msgs.push({ role: "assistant", text: String(r) });
+    if (!isBlank(q)) msgs.push({ role: "user", text: String(q), expected: null });
+    
+    // For responses, find the corresponding Expected value
+    let expectedValue = null;
+    if (!isBlank(r)) {
+      // Pattern: Expected for R1, Expected_1 for R2, Expected_2 for R3, etc.
+      // Also try Expected{k} pattern (Expected1, Expected2) as fallback
+      if (k === 1) {
+        // First Expected column (no suffix)
+        const expectedFirst = row[`Expected`];
+        if (!isBlank(expectedFirst)) {
+          expectedValue = String(expectedFirst).trim();
+        }
+      } else {
+        // Subsequent Expected columns: Expected_1, Expected_2, etc.
+        const expectedUnderscore = row[`Expected_${k - 1}`];
+        if (!isBlank(expectedUnderscore)) {
+          expectedValue = String(expectedUnderscore).trim();
+        }
+      }
+      
+      // Fallback: try Expected{k} pattern
+      if (expectedValue === null) {
+        const expectedK = row[`Expected${k}`];
+        if (!isBlank(expectedK)) {
+          expectedValue = String(expectedK).trim();
+        }
+      }
+      
+      msgs.push({ 
+        role: "assistant", 
+        text: String(r),
+        expected: expectedValue
+      });
+    }
     k++;
   }
   return msgs;
 }
 
 function getRowTitle(row) {
-  // pick a nice display title
-  if ("Number" in row) return `#${row["Number"]}`;
-  if ("ID" in row) return `ID ${row["ID"]}`;
+  // pick a nice display title - prefer Id, then Chat Id, then row number
+  if (!isBlank(row["Id"])) return `ID: ${row["Id"]}`;
+  if (!isBlank(row["Chat Id"])) return `Chat: ${row["Chat Id"]}`;
+  if (!isBlank(row["ID"])) return `ID: ${row["ID"]}`;
   return "Row";
 }
 
@@ -74,7 +117,10 @@ function buildFilters() {
   filtersDiv.innerHTML = "";
   activeFilters = {};
 
-  identifierCols.forEach((col) => {
+  // Filter out Note column from filters
+  const filterableCols = identifierCols.filter((col) => col.toLowerCase() !== "note");
+
+  filterableCols.forEach((col) => {
     // get unique values
     const vals = Array.from(
       new Set(allRows.map((r) => stableValue(r[col])).filter((v) => v !== ""))
@@ -113,13 +159,13 @@ function buildFilters() {
     filtersDiv.appendChild(wrap);
   });
 
-  clearFiltersBtn.disabled = identifierCols.length === 0;
+  clearFiltersBtn.disabled = filterableCols.length === 0;
   clearFiltersBtn.onclick = () => {
     // reset: select all in every filter
     filtersDiv.querySelectorAll("select").forEach((sel) => {
       Array.from(sel.options).forEach((o) => (o.selected = true));
     });
-    identifierCols.forEach((c) => {
+    filterableCols.forEach((c) => {
       const vals = Array.from(
         new Set(allRows.map((r) => stableValue(r[c])).filter((v) => v !== ""))
       );
@@ -131,7 +177,9 @@ function buildFilters() {
 
 function applyFilters(rows) {
   return rows.filter((r) => {
-    for (const col of identifierCols) {
+    // Filter out Note column from filtering logic
+    const filterableCols = identifierCols.filter((col) => col.toLowerCase() !== "note");
+    for (const col of filterableCols) {
       const v = stableValue(r[col]);
       const allowed = activeFilters[col];
       if (allowed && allowed.size > 0) {
@@ -171,15 +219,15 @@ function renderRowList(rows) {
 
     const title = document.createElement("div");
     title.className = "rowtitle";
-
-    const app = row["App"] ? ` — ${row["App"]}` : "";
-    title.textContent = `${getRowTitle(row)}${app}`;
+    title.textContent = getRowTitle(row);
 
     const sub = document.createElement("div");
     sub.className = "rowsub";
-    const p = row["Priority"] !== undefined ? `Priority: ${row["Priority"]}` : "";
-    const exp = row["Expected"] !== undefined ? `Expected: ${row["Expected"]}` : "";
-    sub.textContent = [p, exp].filter(Boolean).join(" • ");
+    const parts = [];
+    if (!isBlank(row["Priority"])) parts.push(`Priority: ${row["Priority"]}`);
+    if (!isBlank(row["Project Name"])) parts.push(row["Project Name"]);
+    if (!isBlank(row["User Email"])) parts.push(row["User Email"]);
+    sub.textContent = parts.length > 0 ? parts.join(" • ") : "No metadata";
 
     item.appendChild(title);
     item.appendChild(sub);
@@ -201,19 +249,35 @@ function renderRowList(rows) {
   }
 }
 
+let metadataOnlyView = false;
+
 function renderChat(row) {
   chat.innerHTML = "";
   meta.innerHTML = "";
 
-  // badges for identifier columns
-  identifierCols.forEach((c) => {
+  // Display metadata columns nicely formatted
+  const metadataCols = identifierCols;
+  metadataCols.forEach((c) => {
     const v = stableValue(row[c]);
     if (v === "") return;
-    const b = document.createElement("span");
-    b.className = "badge";
-    b.textContent = `${c}: ${v}`;
+    const b = document.createElement("div");
+    b.className = "meta-item";
+    const label = document.createElement("span");
+    label.className = "meta-label";
+    label.textContent = `${c}:`;
+    const value = document.createElement("span");
+    value.className = "meta-value";
+    value.textContent = v;
+    b.appendChild(label);
+    b.appendChild(value);
     meta.appendChild(b);
   });
+
+  // If metadata-only view, don't render chat
+  if (metadataOnlyView) {
+    chat.innerHTML = `<div class="hint">Metadata-only view enabled. Toggle to see chat.</div>`;
+    return;
+  }
 
   const messages = rowToMessages(row);
   if (messages.length === 0) {
@@ -224,12 +288,47 @@ function renderChat(row) {
   messages.forEach((m) => {
     const bubble = document.createElement("div");
     bubble.className = `bubble ${m.role}`;
+    
+    // Add color coding for assistant responses based on Expected value
+    if (m.role === "assistant") {
+      if (m.expected !== null && m.expected !== undefined && String(m.expected).trim() !== "") {
+        const expectedLower = String(m.expected).toLowerCase().trim();
+        if (expectedLower === "yes") {
+          bubble.classList.add("expected-yes");
+        } else if (expectedLower === "no") {
+          bubble.classList.add("expected-no");
+        } else {
+          bubble.classList.add("expected-unknown");
+        }
+      } else {
+        bubble.classList.add("expected-unknown");
+      }
+    }
 
     const role = document.createElement("div");
     role.className = "role";
     role.textContent = m.role === "user" ? "User" : "Assistant";
+    
+    // Add Expected indicator for assistant messages
+    if (m.role === "assistant" && m.expected !== null && m.expected !== undefined && String(m.expected).trim() !== "") {
+      const expectedLabel = document.createElement("span");
+      expectedLabel.className = "expected-label";
+      const expectedLower = String(m.expected).toLowerCase().trim();
+      if (expectedLower === "yes") {
+        expectedLabel.textContent = "✓ Expected";
+        expectedLabel.classList.add("expected-yes-label");
+      } else if (expectedLower === "no") {
+        expectedLabel.textContent = "✗ Unexpected";
+        expectedLabel.classList.add("expected-no-label");
+      } else {
+        expectedLabel.textContent = `Expected: ${m.expected}`;
+        expectedLabel.classList.add("expected-unknown-label");
+      }
+      role.appendChild(expectedLabel);
+    }
 
     const text = document.createElement("div");
+    text.className = "message-text";
     text.textContent = m.text;
 
     bubble.appendChild(role);
@@ -303,6 +402,17 @@ function loadSheet(wb, sheetName) {
 
   buildFilters();
   activeIndex = null;
+  
+  // Setup metadata toggle button
+  metadataToggleBtn.disabled = false;
+  metadataToggleBtn.onclick = () => {
+    metadataOnlyView = !metadataOnlyView;
+    metadataToggleBtn.textContent = metadataOnlyView ? "Show Chat" : "Metadata Only";
+    if (activeIndex !== null && filteredRows.length > 0) {
+      renderChat(filteredRows[activeIndex]);
+    }
+  };
+  
   applyAll();
 }
 

@@ -118,11 +118,32 @@
   
   .meta {
     color: var(--muted);
-    font-size: 12px;
-    margin-bottom: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+  }
+  .meta-item {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .meta-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+  .meta-value {
+    color: var(--text);
+    font-size: 13px;
+    word-break: break-word;
   }
   .badge {
     border: 1px solid var(--border);
@@ -159,9 +180,54 @@
     border: 1px solid #134e3a;
   }
   
+  /* Color coding for Expected values */
+  .bubble.assistant.expected-yes {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+  
+  .bubble.assistant.expected-no {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  
+  .bubble.assistant.expected-unknown {
+    background: rgba(107, 114, 128, 0.15);
+    border-color: rgba(107, 114, 128, 0.4);
+  }
+  
   .bubble .role {
     font-size: 11px;
     color: rgba(229, 231, 235, 0.7);
     margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  .expected-label {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  
+  .expected-yes-label {
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+  }
+  
+  .expected-no-label {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+  }
+  
+  .expected-unknown-label {
+    color: #6b7280;
+    background: rgba(107, 114, 128, 0.2);
+  }
+  
+  .message-text {
+    line-height: 1.5;
   }
   
