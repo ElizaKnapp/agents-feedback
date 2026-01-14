@@ -1,42 +1,55 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-    <div class="container">
-        <h1>Project Form</h1>
-        
-        <!-- Form with Project Name dropdown -->
-        <form id="mainForm" class="form">
-            <div class="form-group">
-                <label for="projectName">Project Name:</label>
-                <select id="projectName" name="projectName" required>
-                    <option value="">-- Select a project --</option>
-                </select>
-            </div>
-        </form>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Excel Chat Viewer</title>
+    <link rel="stylesheet" href="style.css" />
 
-        <!-- Component to add new projects -->
-        <div class="add-project-section">
-            <h2>Add New Project</h2>
-            <form id="addProjectForm" class="form">
-                <div class="form-group">
-                    <label for="newProjectName">Project Name:</label>
-                    <input type="text" id="newProjectName" name="newProjectName" required>
-                </div>
-                <div class="form-group">
-                    <label for="projectDescription">Description:</label>
-                    <textarea id="projectDescription" name="projectDescription" rows="3" required></textarea>
-                </div>
-                <button type="submit">Add Project</button>
-            </form>
+    <!-- SheetJS (xlsx) for parsing Excel in-browser -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  </head>
+
+  <body>
+    <header class="topbar">
+      <div class="brand">Excel → Chat Viewer</div>
+      <label class="filebtn">
+        <input id="fileInput" type="file" accept=".xlsx,.xls" />
+        Upload Excel
+      </label>
+
+      <select id="sheetSelect" class="select" title="Sheet" disabled></select>
+
+      <div class="spacer"></div>
+
+      <select id="sortSelect" class="select" disabled></select>
+      <button id="sortDirBtn" class="btn" disabled>↑</button>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="panel">
+          <h3>Filters</h3>
+          <div id="filters"></div>
+          <button id="clearFilters" class="btn secondary" disabled>Clear</button>
         </div>
-    </div>
-    
+
+        <div class="panel">
+          <h3>Rows</h3>
+          <div class="hint">Click a row to render the full chat.</div>
+          <div id="rowList" class="rowlist"></div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <div class="panel">
+          <h3>Chat transcript</h3>
+          <div id="meta" class="meta"></div>
+          <div id="chat" class="chat"></div>
+        </div>
+      </section>
+    </main>
+
     <script src="script.js"></script>
-</body>
+  </body>
 </html>
