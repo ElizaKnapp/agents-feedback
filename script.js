@@ -5,9 +5,6 @@ let identifierCols = [];
 let sheetNames = [];
 let currentSheet = null;
 
-let sortCol = null;
-let sortAsc = true;
-
 const el = (id) => document.getElementById(id);
 
 const fileInput = el("fileInput");
@@ -17,9 +14,6 @@ const clearFiltersBtn = el("clearFilters");
 const rowList = el("rowList");
 const chat = el("chat");
 const meta = el("meta");
-const sortSelect = el("sortSelect");
-const sortDirBtn = el("sortDirBtn");
-const metadataToggleBtn = el("metadataToggleBtn");
 
 // --- Helpers ---
 function isBlank(v) {
@@ -191,17 +185,6 @@ function applyFilters(rows) {
   });
 }
 
-function applySort(rows) {
-  if (!sortCol) return rows;
-  const out = [...rows];
-  out.sort((a, b) => {
-    const av = stableValue(a[sortCol]);
-    const bv = stableValue(b[sortCol]);
-    const cmp = av.localeCompare(bv, undefined, { numeric: true });
-    return sortAsc ? cmp : -cmp;
-  });
-  return out;
-}
 
 // --- Row list + chat rendering ---
 let activeIndex = null;
@@ -249,8 +232,6 @@ function renderRowList(rows) {
   }
 }
 
-let metadataOnlyView = false;
-
 function renderChat(row) {
   chat.innerHTML = "";
   meta.innerHTML = "";
@@ -272,12 +253,6 @@ function renderChat(row) {
     b.appendChild(value);
     meta.appendChild(b);
   });
-
-  // If metadata-only view, don't render chat
-  if (metadataOnlyView) {
-    chat.innerHTML = `<div class="hint">Metadata-only view enabled. Toggle to see chat.</div>`;
-    return;
-  }
 
   const messages = rowToMessages(row);
   if (messages.length === 0) {
@@ -377,50 +352,14 @@ function loadSheet(wb, sheetName) {
   const headers = json.length ? Object.keys(json[0]) : [];
   identifierCols = detectIdentifierCols(headers);
 
-  // Setup sorting dropdown (identifier columns only)
-  sortSelect.innerHTML = "";
-  identifierCols.forEach((c) => {
-    const opt = document.createElement("option");
-    opt.value = c;
-    opt.textContent = `Sort: ${c}`;
-    sortSelect.appendChild(opt);
-  });
-
-  sortCol = identifierCols[0] || null;
-  sortSelect.disabled = !sortCol;
-  sortDirBtn.disabled = !sortCol;
-
-  sortSelect.onchange = () => {
-    sortCol = sortSelect.value;
-    applyAll(true);
-  };
-  sortDirBtn.onclick = () => {
-    sortAsc = !sortAsc;
-    sortDirBtn.textContent = sortAsc ? "↑" : "↓";
-    applyAll(true);
-  };
-
   buildFilters();
   activeIndex = null;
-  
-  // Setup metadata toggle button
-  metadataToggleBtn.disabled = false;
-  metadataToggleBtn.onclick = () => {
-    metadataOnlyView = !metadataOnlyView;
-    metadataToggleBtn.textContent = metadataOnlyView ? "Show Chat" : "Metadata Only";
-    if (activeIndex !== null && filteredRows.length > 0) {
-      renderChat(filteredRows[activeIndex]);
-    }
-  };
-  
   applyAll();
 }
 
 function applyAll(keepSelection = false) {
   const afterFilter = applyFilters(allRows);
-  const afterSort = applySort(afterFilter);
-
-  filteredRows = afterSort;
+  filteredRows = afterFilter;
 
   if (!keepSelection) activeIndex = null;
   renderRowList(filteredRows);
