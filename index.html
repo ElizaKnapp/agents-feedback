@@ -31,11 +31,11 @@
       <aside class="sidebar">
         <div class="panel">
           <div class="panel-header-collapsible">
-            <h3>Add Chat</h3>
-            <button class="collapse-btn" id="addChatToggle">−</button>
+            <h3>Configure Environment</h3>
+            <button class="collapse-btn" id="configEnvToggle">−</button>
           </div>
-          <div id="addChatFormContainer">
-            <form id="addChatForm">
+          <div id="configEnvFormContainer">
+            <form id="configEnvForm">
               <div class="form-group">
                 <label for="location">Location</label>
                 <select id="location" required>
@@ -52,15 +52,31 @@
                 <label for="apiKey">Api Key</label>
                 <input type="text" id="apiKey" required />
               </div>
+              <button type="submit" class="btn" id="configEnvBtn">Configure</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header-collapsible">
+            <h3>Add Chat</h3>
+            <button class="collapse-btn" id="addChatToggle">−</button>
+          </div>
+          <div id="addChatFormContainer">
+            <form id="addChatForm">
               <div class="form-group">
                 <label for="projectId">Project Id</label>
-                <input type="text" id="projectId" required />
+                <select id="projectId" required disabled>
+                  <option value="">Configure environment first</option>
+                </select>
               </div>
               <div class="form-group">
                 <label for="chatId">Chat Id</label>
-                <input type="text" id="chatId" required />
+                <select id="chatId" required disabled>
+                  <option value="">Select a project first</option>
+                </select>
               </div>
-              <button type="submit" class="btn" id="addChatBtn">Add Chat</button>
+              <button type="submit" class="btn" id="addChatBtn" disabled>Add Chat</button>
             </form>
           </div>
         </div>

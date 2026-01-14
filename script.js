@@ -6,6 +6,16 @@ let sheetNames = [];
 let currentSheet = null;
 let nextId = 1; // Track next ID for new chats
 
+// Environment configuration state
+let envConfig = {
+  location: null,
+  userEmail: null,
+  apiKey: null,
+  baseUrl: null
+};
+let availableProjects = [];
+let availableChats = [];
+
 const el = (id) => document.getElementById(id);
 
 const fileInput = el("fileInput");
@@ -14,6 +24,7 @@ const filtersDiv = el("filters");
 const rowList = el("rowList");
 const chat = el("chat");
 const meta = el("meta");
+const configEnvForm = el("configEnvForm");
 const addChatForm = el("addChatForm");
 const downloadBtn = el("downloadBtn");
 
@@ -532,18 +543,51 @@ function updateExpectedInRow(row, exchangeIndex, expectedValue) {
 }
 
 // --- API Integration ---
-async function fetchChatExchanges(location, userEmail, apiKey, projectId, chatId) {
-  const baseUrl = location === "Development" 
-    ? "https://dev-api.ikigailabs.io" 
-    : "https://api.ikigailabs.io";
-  
-  const url = `${baseUrl}/component/get-exchanges-for-chat?project_id=${projectId}&chat_id=${chatId}`;
-  
-  const headers = {
-    'User': userEmail,
-    'Api-key': apiKey,
+function getHeaders() {
+  return {
+    'User': envConfig.userEmail,
+    'Api-key': envConfig.apiKey,
     'Content-Type': 'application/json'
   };
+}
+
+async function fetchProjects() {
+  const url = `${envConfig.baseUrl}/component/get-projects-for-user`;
+  const headers = getHeaders();
+
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.projects || [];
+  } catch (error) {
+    console.error("Error fetching projects:", error);
+    throw error;
+  }
+}
+
+async function fetchChats(projectId) {
+  const url = `${envConfig.baseUrl}/component/get-chats?project_id=${projectId}`;
+  const headers = getHeaders();
+
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.chats || [];
+  } catch (error) {
+    console.error("Error fetching chats:", error);
+    throw error;
+  }
+}
+
+async function fetchChatExchanges(projectId, chatId) {
+  const url = `${envConfig.baseUrl}/component/get-exchanges-for-chat?project_id=${projectId}&chat_id=${chatId}`;
+  const headers = getHeaders();
 
   try {
     const response = await fetch(url, { headers });
@@ -674,23 +718,122 @@ function downloadExcel() {
   XLSX.writeFile(wb, "chat-data.xlsx");
 }
 
-// --- Form submission ---
-addChatForm.addEventListener("submit", async (e) => {
+// --- Configure Environment Form ---
+configEnvForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   
   const location = el("location").value;
   const userEmail = el("userEmail").value;
   const apiKey = el("apiKey").value;
+  
+  const configBtn = el("configEnvBtn");
+  configBtn.disabled = true;
+  configBtn.textContent = "Loading...";
+  
+  try {
+    // Set environment config
+    envConfig.location = location;
+    envConfig.userEmail = userEmail;
+    envConfig.apiKey = apiKey;
+    envConfig.baseUrl = location === "Development" 
+      ? "https://dev-api.ikigailabs.io" 
+      : "https://api.ikigailabs.io";
+    
+    // Fetch projects
+    const projects = await fetchProjects();
+    availableProjects = projects.map(p => p.project_id).filter(Boolean);
+    
+    // Populate project dropdown
+    const projectSelect = el("projectId");
+    projectSelect.innerHTML = '<option value="">Select a project...</option>';
+    availableProjects.forEach(projectId => {
+      const option = document.createElement("option");
+      option.value = projectId;
+      option.textContent = projectId;
+      projectSelect.appendChild(option);
+    });
+    projectSelect.disabled = false;
+    
+    // Reset chat dropdown
+    const chatSelect = el("chatId");
+    chatSelect.innerHTML = '<option value="">Select a project first</option>';
+    chatSelect.disabled = true;
+    availableChats = [];
+    
+    alert(`Environment configured! Found ${availableProjects.length} project(s).`);
+  } catch (error) {
+    alert(`Error configuring environment: ${error.message}`);
+  } finally {
+    configBtn.disabled = false;
+    configBtn.textContent = "Configure";
+  }
+});
+
+// --- Project selection handler ---
+el("projectId").addEventListener("change", async (e) => {
+  const projectId = e.target.value;
+  const chatSelect = el("chatId");
+  const addChatBtn = el("addChatBtn");
+  
+  if (!projectId) {
+    chatSelect.innerHTML = '<option value="">Select a project first</option>';
+    chatSelect.disabled = true;
+    addChatBtn.disabled = true;
+    return;
+  }
+  
+  chatSelect.disabled = true;
+  chatSelect.innerHTML = '<option value="">Loading chats...</option>';
+  
+  try {
+    const chats = await fetchChats(projectId);
+    availableChats = chats.map(c => c.chat_id).filter(Boolean);
+    
+    chatSelect.innerHTML = '<option value="">Select a chat...</option>';
+    availableChats.forEach(chatId => {
+      const option = document.createElement("option");
+      option.value = chatId;
+      option.textContent = chatId;
+      chatSelect.appendChild(option);
+    });
+    chatSelect.disabled = false;
+    
+    if (availableChats.length > 0) {
+      addChatBtn.disabled = false;
+    }
+  } catch (error) {
+    alert(`Error fetching chats: ${error.message}`);
+    chatSelect.innerHTML = '<option value="">Error loading chats</option>';
+    chatSelect.disabled = true;
+    addChatBtn.disabled = true;
+  }
+});
+
+// --- Chat selection handler ---
+el("chatId").addEventListener("change", (e) => {
+  const addChatBtn = el("addChatBtn");
+  addChatBtn.disabled = !e.target.value;
+});
+
+// --- Add Chat Form submission ---
+addChatForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  
   const projectId = el("projectId").value;
   const chatId = el("chatId").value;
+  
+  if (!envConfig.baseUrl || !envConfig.userEmail || !envConfig.apiKey) {
+    alert("Please configure environment first!");
+    return;
+  }
   
   const addChatBtn = el("addChatBtn");
   addChatBtn.disabled = true;
   addChatBtn.textContent = "Loading...";
   
   try {
-    const data = await fetchChatExchanges(location, userEmail, apiKey, projectId, chatId);
-    const newRow = exchangesToRow(data.exchanges || [], location, userEmail, projectId, chatId);
+    const data = await fetchChatExchanges(projectId, chatId);
+    const newRow = exchangesToRow(data.exchanges || [], envConfig.location, envConfig.userEmail, projectId, chatId);
     
     // Add to allRows
     allRows.push(newRow);
@@ -704,9 +847,16 @@ addChatForm.addEventListener("submit", async (e) => {
     renderRowList(filteredRows);
     renderChat(newRow);
     
-    // Clear only projectId and chatId, keep other fields
-    el("projectId").value = "";
+    // Clear chat selection (keep project selected)
     el("chatId").value = "";
+    el("chatId").innerHTML = '<option value="">Select a chat...</option>';
+    availableChats.forEach(chatId => {
+      const option = document.createElement("option");
+      option.value = chatId;
+      option.textContent = chatId;
+      el("chatId").appendChild(option);
+    });
+    addChatBtn.disabled = true;
     
     // Enable download button
     downloadBtn.disabled = false;
@@ -723,7 +873,22 @@ addChatForm.addEventListener("submit", async (e) => {
 // --- Download button ---
 downloadBtn.addEventListener("click", downloadExcel);
 
-// --- Collapsible Add Chat form ---
+// --- Collapsible forms ---
+const configEnvToggle = el("configEnvToggle");
+const configEnvFormContainer = el("configEnvFormContainer");
+let configEnvFormExpanded = true;
+
+configEnvToggle.addEventListener("click", () => {
+  configEnvFormExpanded = !configEnvFormExpanded;
+  if (configEnvFormExpanded) {
+    configEnvFormContainer.style.display = "block";
+    configEnvToggle.textContent = "−";
+  } else {
+    configEnvFormContainer.style.display = "none";
+    configEnvToggle.textContent = "+";
+  }
+});
+
 const addChatToggle = el("addChatToggle");
 const addChatFormContainer = el("addChatFormContainer");
 let addChatFormExpanded = true;

@@ -319,7 +319,7 @@
   
   /* Markdown styling for assistant messages */
   .bubble.assistant .message-text {
-    line-height: 1.5;
+    line-height: 1.4;
   }
   
   .bubble.assistant .message-text h1,
@@ -328,8 +328,8 @@
   .bubble.assistant .message-text h4,
   .bubble.assistant .message-text h5,
   .bubble.assistant .message-text h6 {
-    margin-top: 0.75em;
-    margin-bottom: 0.35em;
+    margin-top: 0.5em;
+    margin-bottom: 0.2em;
     font-weight: 600;
     color: inherit;
   }
@@ -348,7 +348,7 @@
   }
   
   .bubble.assistant .message-text p {
-    margin: 0.35em 0;
+    margin: 0.2em 0;
   }
   
   .bubble.assistant .message-text p:first-child {
@@ -361,12 +361,12 @@
   
   .bubble.assistant .message-text ul,
   .bubble.assistant .message-text ol {
-    margin: 0.35em 0;
+    margin: 0.2em 0;
     padding-left: 1.5em;
   }
   
   .bubble.assistant .message-text li {
-    margin: 0.15em 0;
+    margin: 0.1em 0;
   }
   
   .bubble.assistant .message-text code {
@@ -379,10 +379,10 @@
   
   .bubble.assistant .message-text pre {
     background: rgba(0, 0, 0, 0.3);
-    padding: 8px;
+    padding: 6px;
     border-radius: 6px;
     overflow-x: auto;
-    margin: 0.35em 0;
+    margin: 0.2em 0;
   }
   
   .bubble.assistant .message-text pre code {
@@ -401,12 +401,12 @@
   .bubble.assistant .message-text blockquote {
     border-left: 3px solid rgba(255, 255, 255, 0.3);
     padding-left: 1em;
-    margin: 0.35em 0;
+    margin: 0.2em 0;
     color: rgba(229, 231, 235, 0.8);
   }
   
   .bubble.assistant .message-text br {
-    line-height: 1.2;
+    line-height: 1.1;
   }
   
   .note-container {
