@@ -9,8 +9,6 @@ const el = (id) => document.getElementById(id);
 
 const fileInput = el("fileInput");
 const sheetSelect = el("sheetSelect");
-const filtersDiv = el("filters");
-const clearFiltersBtn = el("clearFilters");
 const rowList = el("rowList");
 const chat = el("chat");
 const meta = el("meta");
@@ -104,85 +102,40 @@ function stableValue(v) {
   return String(v);
 }
 
-// --- Filtering UI ---
-let activeFilters = {}; // { colName: Set(values) }
-
-function buildFilters() {
-  filtersDiv.innerHTML = "";
-  activeFilters = {};
-
-  // Filter out Note column from filters
-  const filterableCols = identifierCols.filter((col) => col.toLowerCase() !== "note");
-
-  filterableCols.forEach((col) => {
-    // get unique values
-    const vals = Array.from(
-      new Set(allRows.map((r) => stableValue(r[col])).filter((v) => v !== ""))
-    ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-
-    if (vals.length === 0) return;
-
-    const wrap = document.createElement("div");
-    wrap.className = "filter";
-
-    const label = document.createElement("label");
-    label.textContent = col;
-
-    const select = document.createElement("select");
-    select.multiple = true;
-    select.size = Math.min(8, Math.max(3, vals.length));
-
-    vals.forEach((v) => {
-      const opt = document.createElement("option");
-      opt.value = v;
-      opt.textContent = v;
-      opt.selected = true; // default all selected
-      select.appendChild(opt);
-    });
-
-    activeFilters[col] = new Set(vals);
-
-    select.addEventListener("change", () => {
-      const chosen = Array.from(select.selectedOptions).map((o) => o.value);
-      activeFilters[col] = new Set(chosen);
-      applyAll();
-    });
-
-    wrap.appendChild(label);
-    wrap.appendChild(select);
-    filtersDiv.appendChild(wrap);
-  });
-
-  clearFiltersBtn.disabled = filterableCols.length === 0;
-  clearFiltersBtn.onclick = () => {
-    // reset: select all in every filter
-    filtersDiv.querySelectorAll("select").forEach((sel) => {
-      Array.from(sel.options).forEach((o) => (o.selected = true));
-    });
-    filterableCols.forEach((c) => {
-      const vals = Array.from(
-        new Set(allRows.map((r) => stableValue(r[c])).filter((v) => v !== ""))
-      );
-      activeFilters[c] = new Set(vals);
-    });
-    applyAll();
-  };
-}
-
-function applyFilters(rows) {
-  return rows.filter((r) => {
-    // Filter out Note column from filtering logic
-    const filterableCols = identifierCols.filter((col) => col.toLowerCase() !== "note");
-    for (const col of filterableCols) {
-      const v = stableValue(r[col]);
-      const allowed = activeFilters[col];
-      if (allowed && allowed.size > 0) {
-        // if column has a value, it must be in allowed; if blank, allow
-        if (v !== "" && !allowed.has(v)) return false;
+// Format date values from Excel (which come as numbers) to readable text
+function formatDateValue(value, colName) {
+  if (isBlank(value)) return "";
+  
+  // Check if column name suggests it's a date
+  const isDateColumn = /date/i.test(colName);
+  
+  if (!isDateColumn) return stableValue(value);
+  
+  // Excel dates are numbers representing days since 1900-01-01
+  // Check if it's a number that could be a date (between reasonable bounds)
+  const num = Number(value);
+  if (!isNaN(num) && num > 0 && num < 1000000) {
+    try {
+      // Excel epoch: January 1, 1900 is day 1
+      // But Excel incorrectly treats 1900 as a leap year, so we use Dec 30, 1899 as epoch
+      const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899
+      const date = new Date(excelEpoch.getTime() + num * 24 * 60 * 60 * 1000);
+      
+      // Check if the date is reasonable (between 1900 and 2100)
+      if (date.getFullYear() >= 1900 && date.getFullYear() <= 2100 && !isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
       }
+    } catch (e) {
+      // If date conversion fails, fall through to return as string
     }
-    return true;
-  });
+  }
+  
+  // If not a valid date number, return as string
+  return stableValue(value);
 }
 
 
@@ -192,7 +145,7 @@ let activeIndex = null;
 function renderRowList(rows) {
   rowList.innerHTML = "";
   if (rows.length === 0) {
-    rowList.innerHTML = `<div class="hint">No rows match filters.</div>`;
+    rowList.innerHTML = `<div class="hint">No rows available.</div>`;
     return;
   }
 
@@ -239,7 +192,7 @@ function renderChat(row) {
   // Display metadata columns nicely formatted
   const metadataCols = identifierCols;
   metadataCols.forEach((c) => {
-    const v = stableValue(row[c]);
+    const v = formatDateValue(row[c], c);
     if (v === "") return;
     const b = document.createElement("div");
     b.className = "meta-item";
@@ -352,14 +305,12 @@ function loadSheet(wb, sheetName) {
   const headers = json.length ? Object.keys(json[0]) : [];
   identifierCols = detectIdentifierCols(headers);
 
-  buildFilters();
   activeIndex = null;
   applyAll();
 }
 
 function applyAll(keepSelection = false) {
-  const afterFilter = applyFilters(allRows);
-  filteredRows = afterFilter;
+  filteredRows = allRows;
 
   if (!keepSelection) activeIndex = null;
   renderRowList(filteredRows);

@@ -61,10 +61,11 @@
     gap: 14px;
     padding: 14px;
     height: calc(100vh - 58px);
+    overflow: auto;
   }
   
   .sidebar { overflow: auto; padding-right: 4px; }
-  .content { overflow: hidden; }
+  .content { overflow: auto; }
   
   .panel {
     background: rgba(17, 24, 39, 0.7);
@@ -98,7 +99,6 @@
   .rowlist {
     display: grid;
     gap: 8px;
-    max-height: 50vh;
     overflow: auto;
     padding-right: 6px;
   }
@@ -153,12 +153,12 @@
   }
   
   .chat {
-    height: calc(100vh - 58px - 14px - 14px - 92px);
     overflow: auto;
     padding: 10px;
     border-radius: 14px;
     border: 1px solid var(--border);
     background: rgba(15, 23, 42, 0.35);
+    max-height: calc(100vh - 200px);
   }
   
   .bubble {
