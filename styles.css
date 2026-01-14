@@ -168,6 +168,15 @@
     border-color: var(--accent);
   }
   
+  .form-group input[type="text"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .form-group input[type="text"]::placeholder {
+    color: var(--muted);
+  }
+  
   #addChatForm button {
     width: 100%;
     margin-top: 8px;

@@ -13,8 +13,9 @@ let envConfig = {
   apiKey: null,
   baseUrl: null
 };
-let availableProjects = [];
-let availableChats = [];
+let availableProjects = []; // Array of {project_id, name}
+let availableChats = []; // Array of {chat_id, name}
+let filteredChats = []; // Filtered chats based on search
 
 const el = (id) => document.getElementById(id);
 
@@ -741,24 +742,30 @@ configEnvForm.addEventListener("submit", async (e) => {
     
     // Fetch projects
     const projects = await fetchProjects();
-    availableProjects = projects.map(p => p.project_id).filter(Boolean);
+    availableProjects = projects
+      .filter(p => p.project_id && p.name)
+      .map(p => ({ project_id: p.project_id, name: p.name }));
     
-    // Populate project dropdown
+    // Populate project dropdown with names
     const projectSelect = el("projectId");
     projectSelect.innerHTML = '<option value="">Select a project...</option>';
-    availableProjects.forEach(projectId => {
+    availableProjects.forEach(project => {
       const option = document.createElement("option");
-      option.value = projectId;
-      option.textContent = projectId;
+      option.value = project.project_id; // Store ID as value
+      option.textContent = project.name; // Display name
       projectSelect.appendChild(option);
     });
     projectSelect.disabled = false;
     
-    // Reset chat dropdown
+    // Reset chat dropdown and search
     const chatSelect = el("chatId");
+    const chatSearch = el("chatSearch");
     chatSelect.innerHTML = '<option value="">Select a project first</option>';
     chatSelect.disabled = true;
+    chatSearch.disabled = true;
+    chatSearch.value = "";
     availableChats = [];
+    filteredChats = [];
     
     alert(`Environment configured! Found ${availableProjects.length} project(s).`);
   } catch (error) {
@@ -773,30 +780,34 @@ configEnvForm.addEventListener("submit", async (e) => {
 el("projectId").addEventListener("change", async (e) => {
   const projectId = e.target.value;
   const chatSelect = el("chatId");
+  const chatSearch = el("chatSearch");
   const addChatBtn = el("addChatBtn");
   
   if (!projectId) {
     chatSelect.innerHTML = '<option value="">Select a project first</option>';
     chatSelect.disabled = true;
+    chatSearch.disabled = true;
+    chatSearch.value = "";
     addChatBtn.disabled = true;
+    availableChats = [];
+    filteredChats = [];
     return;
   }
   
   chatSelect.disabled = true;
+  chatSearch.disabled = true;
   chatSelect.innerHTML = '<option value="">Loading chats...</option>';
+  chatSearch.value = "";
   
   try {
     const chats = await fetchChats(projectId);
-    availableChats = chats.map(c => c.chat_id).filter(Boolean);
+    availableChats = chats
+      .filter(c => c.chat_id && c.name)
+      .map(c => ({ chat_id: c.chat_id, name: c.name }));
+    filteredChats = [...availableChats];
     
-    chatSelect.innerHTML = '<option value="">Select a chat...</option>';
-    availableChats.forEach(chatId => {
-      const option = document.createElement("option");
-      option.value = chatId;
-      option.textContent = chatId;
-      chatSelect.appendChild(option);
-    });
-    chatSelect.disabled = false;
+    populateChatDropdown();
+    chatSearch.disabled = false;
     
     if (availableChats.length > 0) {
       addChatBtn.disabled = false;
@@ -805,7 +816,46 @@ el("projectId").addEventListener("change", async (e) => {
     alert(`Error fetching chats: ${error.message}`);
     chatSelect.innerHTML = '<option value="">Error loading chats</option>';
     chatSelect.disabled = true;
+    chatSearch.disabled = true;
     addChatBtn.disabled = true;
+    availableChats = [];
+    filteredChats = [];
+  }
+});
+
+// --- Populate chat dropdown helper ---
+function populateChatDropdown() {
+  const chatSelect = el("chatId");
+  chatSelect.innerHTML = '<option value="">Select a chat...</option>';
+  filteredChats.forEach(chat => {
+    const option = document.createElement("option");
+    option.value = chat.chat_id; // Store ID as value
+    option.textContent = chat.name; // Display name
+    chatSelect.appendChild(option);
+  });
+  chatSelect.disabled = false;
+}
+
+// --- Chat search handler ---
+el("chatSearch").addEventListener("input", (e) => {
+  const searchTerm = e.target.value.toLowerCase().trim();
+  
+  if (!searchTerm) {
+    filteredChats = [...availableChats];
+  } else {
+    filteredChats = availableChats.filter(chat => 
+      chat.name.toLowerCase().includes(searchTerm)
+    );
+  }
+  
+  populateChatDropdown();
+  
+  // Clear chat selection if current selection is not in filtered results
+  const chatSelect = el("chatId");
+  const selectedChatId = chatSelect.value;
+  if (selectedChatId && !filteredChats.find(c => c.chat_id === selectedChatId)) {
+    chatSelect.value = "";
+    el("addChatBtn").disabled = true;
   }
 });
 
@@ -847,15 +897,11 @@ addChatForm.addEventListener("submit", async (e) => {
     renderRowList(filteredRows);
     renderChat(newRow);
     
-    // Clear chat selection (keep project selected)
+    // Clear chat selection and search (keep project selected)
     el("chatId").value = "";
-    el("chatId").innerHTML = '<option value="">Select a chat...</option>';
-    availableChats.forEach(chatId => {
-      const option = document.createElement("option");
-      option.value = chatId;
-      option.textContent = chatId;
-      el("chatId").appendChild(option);
-    });
+    el("chatSearch").value = "";
+    filteredChats = [...availableChats];
+    populateChatDropdown();
     addChatBtn.disabled = true;
     
     // Enable download button
