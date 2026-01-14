@@ -9,6 +9,7 @@ const el = (id) => document.getElementById(id);
 
 const fileInput = el("fileInput");
 const sheetSelect = el("sheetSelect");
+const filtersDiv = el("filters");
 const rowList = el("rowList");
 const chat = el("chat");
 const meta = el("meta");
@@ -24,7 +25,9 @@ function detectIdentifierCols(headers) {
     const normalized = h.trim();
     return !/^Q\d+$/i.test(normalized) && 
            !/^R\d+$/i.test(normalized) && 
-           !/^Expected$/i.test(normalized);
+           !/^Expected$/i.test(normalized) &&
+           !/^Expected_\d+$/i.test(normalized) &&
+           !/^Expected\d+$/i.test(normalized);
   });
 }
 
@@ -138,6 +141,76 @@ function formatDateValue(value, colName) {
   return stableValue(value);
 }
 
+// --- Filtering UI ---
+let activeFilters = {}; // { colName: Set(values) }
+
+const FILTER_COLUMNS = ["Priority", "Location Run", "User Email", "Project Name"];
+
+function buildFilters() {
+  filtersDiv.innerHTML = "";
+  activeFilters = {};
+
+  FILTER_COLUMNS.forEach((col) => {
+    // Check if column exists in the data
+    if (!allRows.length || !(col in allRows[0])) return;
+
+    // Get unique values from all rows
+    const vals = Array.from(
+      new Set(allRows.map((r) => stableValue(r[col])).filter((v) => v !== ""))
+    ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    if (vals.length === 0) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "filter";
+
+    const label = document.createElement("label");
+    label.textContent = col;
+
+    const select = document.createElement("select");
+    select.multiple = false; // Single select dropdown
+    select.size = 1;
+    
+    // Add "All" option
+    const allOpt = document.createElement("option");
+    allOpt.value = "";
+    allOpt.textContent = "All";
+    allOpt.selected = true;
+    select.appendChild(allOpt);
+
+    vals.forEach((v) => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+
+    activeFilters[col] = null; // null means "all selected"
+
+    select.addEventListener("change", () => {
+      const selectedValue = select.value;
+      activeFilters[col] = selectedValue === "" ? null : selectedValue;
+      applyAll();
+    });
+
+    wrap.appendChild(label);
+    wrap.appendChild(select);
+    filtersDiv.appendChild(wrap);
+  });
+}
+
+function applyFilters(rows) {
+  return rows.filter((r) => {
+    for (const col of FILTER_COLUMNS) {
+      const filterValue = activeFilters[col];
+      if (filterValue === null) continue; // No filter applied
+      
+      const rowValue = stableValue(r[col]);
+      if (rowValue !== filterValue) return false;
+    }
+    return true;
+  });
+}
 
 // --- Row list + chat rendering ---
 let activeIndex = null;
@@ -145,7 +218,7 @@ let activeIndex = null;
 function renderRowList(rows) {
   rowList.innerHTML = "";
   if (rows.length === 0) {
-    rowList.innerHTML = `<div class="hint">No rows available.</div>`;
+    rowList.innerHTML = `<div class="hint">No rows match filters.</div>`;
     return;
   }
 
@@ -189,8 +262,15 @@ function renderChat(row) {
   chat.innerHTML = "";
   meta.innerHTML = "";
 
-  // Display metadata columns nicely formatted
-  const metadataCols = identifierCols;
+  // Display metadata columns nicely formatted, excluding Expected columns
+  const metadataCols = identifierCols.filter((c) => {
+    const normalized = c.trim();
+    // Exclude Expected columns from metadata display
+    return !/^Expected$/i.test(normalized) &&
+           !/^Expected_\d+$/i.test(normalized) &&
+           !/^Expected\d+$/i.test(normalized);
+  });
+  
   metadataCols.forEach((c) => {
     const v = formatDateValue(row[c], c);
     if (v === "") return;
@@ -305,12 +385,14 @@ function loadSheet(wb, sheetName) {
   const headers = json.length ? Object.keys(json[0]) : [];
   identifierCols = detectIdentifierCols(headers);
 
+  buildFilters();
   activeIndex = null;
   applyAll();
 }
 
 function applyAll(keepSelection = false) {
-  filteredRows = allRows;
+  const afterFilter = applyFilters(allRows);
+  filteredRows = afterFilter;
 
   if (!keepSelection) activeIndex = null;
   renderRowList(filteredRows);
