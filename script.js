@@ -611,9 +611,9 @@ function exchangesToRow(exchanges, location, userEmail, projectId, chatId) {
     return timeA - timeB;
   });
 
-  // Create new row - use current date as text (not Excel date number)
+  // Create new row - store date as ISO string for easy conversion
   const today = new Date();
-  const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
   
   const newRow = {
     "Id": nextId++,
@@ -705,18 +705,129 @@ function downloadExcel() {
   
   const orderedColumns = [...standardCols, ...interleavedCols];
   
-  // Convert rows to array of arrays
+  // Convert rows to array of arrays, converting dates to Excel serial numbers
   const wsData = [orderedColumns]; // Header row
+  const dateColIndex = orderedColumns.indexOf("Date");
+  
   allRows.forEach(row => {
-    const rowData = orderedColumns.map(col => row[col] || "");
+    const rowData = orderedColumns.map((col, colIndex) => {
+      const value = row[col] || "";
+      
+      // Convert Date column to Excel date serial number
+      if (col === "Date" && value) {
+        return convertToExcelDate(value);
+      }
+      
+      return value;
+    });
     wsData.push(rowData);
   });
   
   const ws = XLSX.utils.aoa_to_sheet(wsData);
+  
+  // Format Date column cells as dates (dd-mmm-yy format)
+  if (dateColIndex >= 0) {
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let row = 1; row <= range.e.r; row++) { // Skip header row
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: dateColIndex });
+      if (ws[cellAddress] && ws[cellAddress].v !== null && ws[cellAddress].v !== "") {
+        // Ensure it's a number (Excel date serial)
+        if (typeof ws[cellAddress].v === 'number') {
+          ws[cellAddress].z = 'dd-mmm-yy'; // Excel date format code
+          ws[cellAddress].t = 'n'; // Number type (Excel dates are numbers)
+        }
+      }
+    }
+    
+    // Set column width for Date column
+    if (!ws['!cols']) ws['!cols'] = [];
+    ws['!cols'][dateColIndex] = { wch: 12 };
+  }
+  
   XLSX.utils.book_append_sheet(wb, ws, currentSheet || "Sheet1");
   
   // Download
   XLSX.writeFile(wb, "chat-data.xlsx");
+}
+
+// Convert date string or number to Excel date serial number
+function convertToExcelDate(value) {
+  if (!value) return "";
+  
+  // If it's already a number (Excel serial), return it
+  const num = Number(value);
+  if (!isNaN(num) && num > 0 && num < 1000000) {
+    // Check if it's already an Excel date serial number
+    const testDate = new Date(1899, 11, 30);
+    testDate.setDate(testDate.getDate() + num);
+    if (testDate.getFullYear() >= 1900 && testDate.getFullYear() <= 2100) {
+      return num;
+    }
+  }
+  
+  // Try to parse as date string
+  let date;
+  if (typeof value === 'string') {
+    // Try various date formats
+    date = new Date(value);
+    if (isNaN(date.getTime())) {
+      // Try parsing formats like "January 15, 2024"
+      date = parseDateString(value);
+    }
+  } else {
+    date = new Date(value);
+  }
+  
+  if (isNaN(date.getTime())) {
+    return value; // Return original if can't parse
+  }
+  
+  // Convert to Excel serial number
+  // Excel epoch: Dec 30, 1899 (Excel incorrectly treats 1900 as leap year)
+  const excelEpoch = new Date(1899, 11, 30);
+  const diffTime = date.getTime() - excelEpoch.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays;
+}
+
+// Parse date strings like "January 15, 2024" or "2024-01-15"
+function parseDateString(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  
+  // Try ISO format first (YYYY-MM-DD)
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+  }
+  
+  // Try month name format "January 15, 2024"
+  const monthNameMatch = dateStr.match(/(\w+)\s+(\d+),\s+(\d+)/);
+  if (monthNameMatch) {
+    const monthNames = ["january", "february", "march", "april", "may", "june",
+      "july", "august", "september", "october", "november", "december"];
+    const month = monthNames.indexOf(monthNameMatch[1].toLowerCase());
+    if (month >= 0) {
+      return new Date(parseInt(monthNameMatch[3]), month, parseInt(monthNameMatch[2]));
+    }
+  }
+  
+  // Try numeric formats
+  const numericMatch = dateStr.match(/(\d+)[\/-](\d+)[\/-](\d+)/);
+  if (numericMatch) {
+    const parts = numericMatch.slice(1).map(Number);
+    if (parts[0] > 1000) {
+      // YYYY-MM-DD or YYYY/MM/DD
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    } else if (parts[2] > 1000) {
+      // MM/DD/YYYY
+      return new Date(parts[2], parts[0] - 1, parts[1]);
+    }
+  }
+  
+  // Fallback to default parsing
+  const parsed = new Date(dateStr);
+  return isNaN(parsed.getTime()) ? null : parsed;
 }
 
 // --- Configure Environment Form ---
