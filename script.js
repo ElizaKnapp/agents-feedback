@@ -1374,34 +1374,36 @@ pushBtn.addEventListener("click", async () => {
     // which fails. So we use form-based submission via hidden iframe, which
     // bypasses CORS entirely because it's a traditional form POST, not an AJAX request.
     console.log("Using iframe form submission (bypasses CORS)");
-    return new Promise((resolve, reject) => {
-      // Create a hidden form
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = scriptUrl;
-      form.target = 'pushFrame_' + Date.now();
-      form.style.display = 'none';
-      
-      // Create hidden iframe to receive response
-      const iframeName = form.target;
-      const iframe = document.createElement('iframe');
-      iframe.name = iframeName;
-      iframe.style.display = 'none';
-      
-      let resolved = false;
-      
-      iframe.onload = () => {
-        if (resolved) return;
-        resolved = true;
+    
+    try {
+      await new Promise((resolve, reject) => {
+        // Create a hidden form
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = scriptUrl;
+        form.target = 'pushFrame_' + Date.now();
+        form.style.display = 'none';
         
-        setTimeout(() => {
-          try {
-            // Try to read response from iframe (may be blocked by CORS)
-            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-            const responseText = iframeDoc.body?.innerText || iframeDoc.body?.textContent || iframeDoc.body?.innerHTML || '';
-            console.log("Iframe response:", responseText);
-            
-            if (responseText) {
+        // Create hidden iframe to receive response
+        const iframeName = form.target;
+        const iframe = document.createElement('iframe');
+        iframe.name = iframeName;
+        iframe.style.display = 'none';
+        
+        let resolved = false;
+        
+        iframe.onload = () => {
+          if (resolved) return;
+          resolved = true;
+          
+          setTimeout(() => {
+            try {
+              // Try to read response from iframe (may be blocked by CORS)
+              const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+              const responseText = iframeDoc.body?.innerText || iframeDoc.body?.textContent || iframeDoc.body?.innerHTML || '';
+              console.log("Iframe response:", responseText);
+              
+              if (responseText) {
               let data;
               try {
                 data = JSON.parse(responseText);
@@ -1409,10 +1411,18 @@ pushBtn.addEventListener("click", async () => {
                   reject(new Error(data.error || data.message || 'Push failed'));
                   return;
                 }
+                // Show success message immediately
+                syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
+                syncStatus.style.color = "var(--accent)";
+                syncStatus.style.fontWeight = "500";
                 resolve(data);
               } catch (e) {
                 // If response contains "success", assume it worked
                 if (responseText.includes('success') || responseText.includes('true')) {
+                  // Show success message immediately
+                  syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
+                  syncStatus.style.color = "var(--accent)";
+                  syncStatus.style.fontWeight = "500";
                   resolve({ success: true });
                 } else {
                   reject(new Error('Could not parse response: ' + responseText.substring(0, 100)));
@@ -1421,61 +1431,72 @@ pushBtn.addEventListener("click", async () => {
             } else {
               // No response text, assume success (CORS blocked reading)
               console.warn("No iframe response text (CORS blocked), assuming success");
+              // Show success message immediately
+              syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
+              syncStatus.style.color = "var(--accent)";
+              syncStatus.style.fontWeight = "500";
               resolve({ success: true });
             }
           } catch (e) {
             // CORS blocked reading iframe content, but form submission likely succeeded
             console.warn("CORS blocked iframe read, assuming success:", e);
+            // Show success message immediately
+            syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
+            syncStatus.style.color = "var(--accent)";
+            syncStatus.style.fontWeight = "500";
             resolve({ success: true });
-          } finally {
-            // Cleanup
-            setTimeout(() => {
-              if (form.parentNode) document.body.removeChild(form);
-              if (iframe.parentNode) document.body.removeChild(iframe);
-            }, 1000);
+            } finally {
+              // Cleanup
+              setTimeout(() => {
+                if (form.parentNode) document.body.removeChild(form);
+                if (iframe.parentNode) document.body.removeChild(iframe);
+              }, 1000);
+            }
+          }, 500); // Small delay to ensure response is loaded
+        };
+        
+        // Add data as hidden input
+        // Note: Form encoding happens automatically, don't double-encode
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'data';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
+        
+        // Set form encoding explicitly
+        form.enctype = 'application/x-www-form-urlencoded';
+        
+        // Append to body and submit
+        document.body.appendChild(iframe);
+        document.body.appendChild(form);
+        form.submit();
+        
+        // Fallback timeout in case iframe doesn't load
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            console.warn("Iframe timeout, assuming success");
+            // Show success message immediately
+            syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
+            syncStatus.style.color = "var(--accent)";
+            syncStatus.style.fontWeight = "500";
+            if (form.parentNode) document.body.removeChild(form);
+            if (iframe.parentNode) document.body.removeChild(iframe);
+            resolve({ success: true });
           }
-        }, 500); // Small delay to ensure response is loaded
-      };
+        }, 30000); // 30 second timeout
+      });
       
-      // Add data as hidden input
-      // Note: Form encoding happens automatically, don't double-encode
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'data';
-      input.value = JSON.stringify(payload);
-      form.appendChild(input);
-      
-      // Set form encoding explicitly
-      form.enctype = 'application/x-www-form-urlencoded';
-      
-      // Append to body and submit
-      document.body.appendChild(iframe);
-      document.body.appendChild(form);
-      form.submit();
-      
-      // Fallback timeout in case iframe doesn't load
+      // Set up timeout to clear success message after 5 seconds
       setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          console.warn("Iframe timeout, assuming success");
-          if (form.parentNode) document.body.removeChild(form);
-          if (iframe.parentNode) document.body.removeChild(iframe);
-          resolve({ success: true });
+        if (syncStatus.textContent.includes("Successfully pushed")) {
+          syncStatus.textContent = "";
+          syncStatus.style.fontWeight = "";
         }
-      }, 30000); // 30 second timeout
-    });
-    
-    // Show success message
-    syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
-    syncStatus.style.color = "var(--accent)";
-    syncStatus.style.fontWeight = "500";
-    
-    // Keep success message visible for 5 seconds, then clear
-    setTimeout(() => {
-      if (syncStatus.textContent.includes("Successfully pushed")) {
-        syncStatus.textContent = "";
-      }
-    }, 5000);
+      }, 5000);
+    } catch (pushError) {
+      throw pushError; // Re-throw to be caught by outer catch block
+    }
   } catch (error) {
     const errorMsg = error.message || String(error);
     syncStatus.textContent = `Error: ${errorMsg}`;
