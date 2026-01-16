@@ -46,35 +46,14 @@
               <div class="hint">Name of the sheet tab (default: Sheet1)</div>
             </div>
             <div class="form-group">
-              <label>
-                <input type="radio" name="syncMethod" value="oauth" checked />
-                OAuth Token (Direct API)
-              </label>
+              <label for="syncApiKey">API Key (for Pull)</label>
+              <input type="password" id="syncApiKey" placeholder="Google API Key" />
+              <div class="hint">Required for pulling data. Get from Google Cloud Console.</div>
             </div>
             <div class="form-group">
-              <label>
-                <input type="radio" name="syncMethod" value="script" />
-                Google Apps Script (No OAuth needed)
-              </label>
-            </div>
-            <div id="oauthFields">
-              <div class="form-group">
-                <label for="syncAuthToken">OAuth Access Token</label>
-                <input type="password" id="syncAuthToken" placeholder="OAuth 2.0 Access Token" />
-                <div class="hint">Required for direct API push</div>
-              </div>
-            </div>
-            <div id="scriptFields" style="display: none;">
-              <div class="form-group">
-                <label for="scriptUrl">Apps Script Web App URL</label>
-                <input type="url" id="scriptUrl" placeholder="https://script.google.com/macros/s/..." />
-                <div class="hint">Deploy as web app (see instructions)</div>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="syncApiKey">API Key (Optional, for Pull only)</label>
-              <input type="password" id="syncApiKey" placeholder="Google API Key (for public sheets)" />
-              <div class="hint">Only needed if pulling from a publicly accessible sheet</div>
+              <label for="scriptUrl">Apps Script Web App URL (for Push)</label>
+              <input type="url" id="scriptUrl" placeholder="https://script.google.com/macros/s/..." />
+              <div class="hint">Required for pushing data. Deploy Apps Script as web app (see instructions).</div>
             </div>
             <button class="btn secondary" id="pullBtn">Pull Data</button>
             <button class="btn secondary" id="pushBtn" disabled>Push Data</button>
@@ -86,10 +65,15 @@
                 <p>Open your Google Sheet → Copy ID from URL:<br/>
                 <code>docs.google.com/spreadsheets/d/[THIS_IS_THE_ID]/edit</code></p>
                 
-                <p style="margin-top: 12px;"><strong>2. Choose Push Method</strong></p>
+                <p style="margin-top: 12px;"><strong>2. Get API Key (for Pull)</strong></p>
+                <p>1. Go to <a href="https://console.cloud.google.com" target="_blank" style="color: var(--accent);">Google Cloud Console</a><br/>
+                2. Create/select a project<br/>
+                3. Enable "Google Sheets API"<br/>
+                4. Go to "Credentials" → "Create Credentials" → "API Key"<br/>
+                5. Copy the API key</p>
                 
-                <p><strong>Option A: Google Apps Script (No OAuth - Recommended!)</strong><br/>
-                1. Open your Google Sheet<br/>
+                <p style="margin-top: 12px;"><strong>3. Set Up Apps Script (for Push)</strong></p>
+                <p>1. Open your Google Sheet<br/>
                 2. Go to Extensions → Apps Script<br/>
                 3. Paste this code:</p>
                 <pre style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-size: 10px; overflow-x: auto; margin: 4px 0;">
@@ -109,21 +93,14 @@ function doPost(e) {
                 7. Who has access: "Anyone"<br/>
                 8. Click "Deploy" → Copy the Web App URL</p>
                 
-                <p><strong>Option B: OAuth Token (Direct API)</strong><br/>
-                1. Go to <a href="https://developers.google.com/oauthplayground" target="_blank" style="color: var(--accent);">OAuth 2.0 Playground</a><br/>
-                2. Select "Google Sheets API v4" → "https://www.googleapis.com/auth/spreadsheets"<br/>
-                3. Authorize → Exchange for tokens → Copy access token</p>
+                <p style="margin-top: 12px;"><strong>4. Share Your Sheet (for Pull)</strong></p>
+                <p>In Google Sheets: Click "Share" → Make it "Anyone with the link" can view (required for API key to work)</p>
                 
-                <p style="margin-top: 12px;"><strong>3. Share Your Sheet</strong></p>
-                <p>For Apps Script: No sharing needed (runs as you)<br/>
-                For OAuth: Share with the Google account you authenticated with</p>
-                
-                <p style="margin-top: 12px;"><strong>4. Configure Here</strong></p>
+                <p style="margin-top: 12px;"><strong>5. Configure Here</strong></p>
                 <p>• Spreadsheet ID: Paste from step 1<br/>
                 • Sheet Name: Usually "Sheet1"<br/>
-                • Choose method (Apps Script or OAuth)<br/>
-                • Enter Apps Script URL OR OAuth Token<br/>
-                • API Key: Optional, only for Pull from public sheets</p>
+                • API Key: Paste from step 2 (for Pull)<br/>
+                • Apps Script URL: Paste from step 3 (for Push)</p>
               </div>
             </details>
           </div>
