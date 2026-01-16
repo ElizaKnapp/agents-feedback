@@ -1363,10 +1363,14 @@ pushBtn.addEventListener("click", async () => {
       })
     });
     
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
     const data = await response.json();
     
-    if (!response.ok) {
-      throw new Error(data.error?.message || data.message || `HTTP error! status: ${response.status}`);
+    if (data.error || (data.success === false)) {
+      throw new Error(data.error || data.message || 'Push failed');
     }
     
     syncStatus.textContent = `Successfully pushed ${allRows.length} rows to ${sheet}`;

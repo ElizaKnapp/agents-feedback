@@ -78,20 +78,29 @@
                 3. Paste this code:</p>
                 <pre style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-size: 10px; overflow-x: auto; margin: 4px 0;">
 function doPost(e) {
-  const data = JSON.parse(e.postData.contents);
-  const ss = SpreadsheetApp.openById(data.spreadsheetId);
-  const sheet = ss.getSheetByName(data.sheetName) || ss.getActiveSheet();
-  sheet.clear();
-  if (data.values && data.values.length > 0) {
-    sheet.getRange(1, 1, data.values.length, data.values[0].length).setValues(data.values);
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.openById(data.spreadsheetId);
+    const sheet = ss.getSheetByName(data.sheetName) || ss.getActiveSheet();
+    sheet.clear();
+    if (data.values && data.values.length > 0) {
+      sheet.getRange(1, 1, data.values.length, data.values[0].length).setValues(data.values);
+    }
+    return ContentService.createTextOutput(JSON.stringify({success: true}))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
-  return ContentService.createTextOutput(JSON.stringify({success: true}));
 }</pre>
                 <p>4. Click "Deploy" → "New deployment"<br/>
                 5. Type: "Web app"<br/>
                 6. Execute as: "Me"<br/>
-                7. Who has access: "Anyone"<br/>
-                8. Click "Deploy" → Copy the Web App URL</p>
+                7. Who has access: "Anyone" (IMPORTANT: This enables CORS)<br/>
+                8. Click "Deploy" → Copy the Web App URL<br/>
+                <strong>Note:</strong> If you get "Failed to fetch" errors, make sure "Who has access" is set to "Anyone" and redeploy.</p>
                 
                 <p style="margin-top: 12px;"><strong>4. Share Your Sheet (for Pull)</strong></p>
                 <p>In Google Sheets: Click "Share" → Make it "Anyone with the link" can view (required for API key to work)</p>
