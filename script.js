@@ -282,9 +282,12 @@ function renderRowList(rows) {
   }
 }
 
+let currentRow = null; // Store reference to currently displayed row
+
 function renderChat(row) {
   chat.innerHTML = "";
   meta.innerHTML = "";
+  currentRow = row; // Store reference to current row
 
   // Display metadata columns nicely formatted, excluding Expected columns
   const metadataCols = identifierCols.filter((c) => {
@@ -296,16 +299,51 @@ function renderChat(row) {
   });
   
   metadataCols.forEach((c) => {
-    const v = formatDateValue(row[c], c);
-    if (v === "") return;
     const b = document.createElement("div");
     b.className = "meta-item";
     const label = document.createElement("span");
     label.className = "meta-label";
     label.textContent = `${c}:`;
-    const value = document.createElement("span");
-    value.className = "meta-value";
-    value.textContent = v;
+    
+    // Create editable input field
+    const value = document.createElement("input");
+    value.type = "text";
+    value.className = "meta-value editable-meta";
+    
+    // Special handling for Date column - show formatted date but store raw value
+    if (/date/i.test(c)) {
+      const rawValue = row[c] || "";
+      const displayValue = formatDateValue(rawValue, c);
+      if (displayValue && displayValue !== stableValue(rawValue)) {
+        // If it's a formatted date, show it but store the original
+        value.value = displayValue;
+        value.dataset.originalValue = rawValue;
+      } else {
+        value.value = rawValue;
+      }
+    } else {
+      value.value = row[c] || "";
+    }
+    
+    value.placeholder = `Enter ${c}...`;
+    
+    // Store column name for updates
+    value.dataset.column = c;
+    
+    // Update row on blur
+    value.addEventListener("blur", () => {
+      updateMetadataInRow(c, value.value);
+      // Update download button
+      downloadBtn.disabled = false;
+    });
+    
+    // Handle Enter key
+    value.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        value.blur();
+      }
+    });
+    
     b.appendChild(label);
     b.appendChild(value);
     meta.appendChild(b);
@@ -543,6 +581,25 @@ function updateExpectedInRow(row, exchangeIndex, expectedValue) {
   downloadBtn.disabled = false;
 }
 
+function updateMetadataInRow(columnName, value) {
+  if (!currentRow) return;
+  
+  // For Date column, if user entered a formatted date, try to convert it back
+  if (/date/i.test(columnName)) {
+    // Try to parse the formatted date back to a value we can store
+    const parsedDate = parseDateString(value);
+    if (parsedDate) {
+      // Convert to ISO string for storage
+      const isoDate = parsedDate.toISOString().split('T')[0];
+      currentRow[columnName] = isoDate;
+      return;
+    }
+  }
+  
+  // For other columns, store as-is
+  currentRow[columnName] = value;
+}
+
 // --- API Integration ---
 function getHeaders() {
   return {
@@ -603,7 +660,7 @@ async function fetchChatExchanges(projectId, chatId) {
   }
 }
 
-function exchangesToRow(exchanges, location, userEmail, projectId, chatId) {
+function exchangesToRow(exchanges, location, userEmail, projectId, chatId, projectName = "") {
   // Sort exchanges by created_at (earliest to latest)
   const sortedExchanges = [...exchanges].sort((a, b) => {
     const timeA = parseInt(a.created_at) || 0;
@@ -618,7 +675,7 @@ function exchangesToRow(exchanges, location, userEmail, projectId, chatId) {
   const newRow = {
     "Id": nextId++,
     "Priority": "None",
-    "Project Name": "",
+    "Project Name": projectName, // Auto-set from selected project
     "Project Description": "",
     "Date": dateStr,
     "Location Run": location,
@@ -994,7 +1051,12 @@ addChatForm.addEventListener("submit", async (e) => {
   
   try {
     const data = await fetchChatExchanges(projectId, chatId);
-    const newRow = exchangesToRow(data.exchanges || [], envConfig.location, envConfig.userEmail, projectId, chatId);
+    
+    // Find project name from availableProjects
+    const selectedProject = availableProjects.find(p => p.project_id === projectId);
+    const projectName = selectedProject ? selectedProject.name : "";
+    
+    const newRow = exchangesToRow(data.exchanges || [], envConfig.location, envConfig.userEmail, projectId, chatId, projectName);
     
     // Add to allRows
     allRows.push(newRow);

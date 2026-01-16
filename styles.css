@@ -240,6 +240,29 @@
     font-size: 13px;
     word-break: break-word;
   }
+  
+  .editable-meta {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.2s, background-color 0.2s;
+  }
+  
+  .editable-meta:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(15, 23, 42, 0.8);
+  }
+  
+  .editable-meta::placeholder {
+    color: var(--muted);
+    opacity: 0.6;
+  }
   .badge {
     border: 1px solid var(--border);
     padding: 4px 8px;
