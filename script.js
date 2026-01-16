@@ -28,7 +28,6 @@ const meta = el("meta");
 const configEnvForm = el("configEnvForm");
 const addChatForm = el("addChatForm");
 const downloadBtn = el("downloadBtn");
-const syncBtn = el("syncBtn");
 const spreadsheetId = el("spreadsheetId");
 const sheetName = el("sheetName");
 const syncAuthToken = el("syncAuthToken");
@@ -556,7 +555,6 @@ function loadSheet(wb, sheetName) {
   activeIndex = null;
   applyAll();
   downloadBtn.disabled = false;
-  syncBtn.disabled = false;
   
   // Sync settings will be loaded when sync functions are initialized
 }
