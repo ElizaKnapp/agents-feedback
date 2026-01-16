@@ -28,6 +28,13 @@ const meta = el("meta");
 const configEnvForm = el("configEnvForm");
 const addChatForm = el("addChatForm");
 const downloadBtn = el("downloadBtn");
+const syncBtn = el("syncBtn");
+const spreadsheetId = el("spreadsheetId");
+const sheetName = el("sheetName");
+const syncAuthToken = el("syncAuthToken");
+const pullBtn = el("pullBtn");
+const pushBtn = el("pushBtn");
+const syncStatus = el("syncStatus");
 
 // --- Helpers ---
 function isBlank(v) {
@@ -549,6 +556,9 @@ function loadSheet(wb, sheetName) {
   activeIndex = null;
   applyAll();
   downloadBtn.disabled = false;
+  syncBtn.disabled = false;
+  
+  // Sync settings will be loaded when sync functions are initialized
 }
 
 function applyAll(keepSelection = false) {
@@ -557,6 +567,11 @@ function applyAll(keepSelection = false) {
 
   if (!keepSelection) activeIndex = null;
   renderRowList(filteredRows);
+  
+  // Update sync buttons if function exists
+  if (typeof updateSyncButtons === 'function') {
+    updateSyncButtons();
+  }
 }
 
 // --- Update functions for editing ---
@@ -592,12 +607,18 @@ function updateMetadataInRow(columnName, value) {
       // Convert to ISO string for storage
       const isoDate = parsedDate.toISOString().split('T')[0];
       currentRow[columnName] = isoDate;
+      triggerAutoSync();
       return;
     }
   }
   
   // For other columns, store as-is
   currentRow[columnName] = value;
+  triggerAutoSync();
+}
+
+function triggerAutoSync() {
+  // Auto-sync removed per user request
 }
 
 // --- API Integration ---
@@ -1091,6 +1112,268 @@ addChatForm.addEventListener("submit", async (e) => {
 
 // --- Download button ---
 downloadBtn.addEventListener("click", downloadExcel);
+
+// --- Google Sheets Sync functionality ---
+function loadSyncSettings() {
+  const savedSpreadsheetId = localStorage.getItem('spreadsheetId');
+  const savedSheetName = localStorage.getItem('sheetName');
+  const savedApiKey = localStorage.getItem('syncAuthToken');
+  
+  if (savedSpreadsheetId) spreadsheetId.value = savedSpreadsheetId;
+  if (savedSheetName) sheetName.value = savedSheetName;
+  if (savedApiKey) syncAuthToken.value = savedApiKey;
+  
+  updateSyncButtons();
+}
+
+function saveSyncSettings() {
+  if (spreadsheetId.value) localStorage.setItem('spreadsheetId', spreadsheetId.value);
+  if (sheetName.value) localStorage.setItem('sheetName', sheetName.value);
+  if (syncAuthToken.value) localStorage.setItem('syncAuthToken', syncAuthToken.value);
+}
+
+function updateSyncButtons() {
+  const hasConfig = spreadsheetId.value.trim() !== "" && syncAuthToken.value.trim() !== "";
+  pullBtn.disabled = !hasConfig;
+  pushBtn.disabled = !hasConfig || allRows.length === 0;
+}
+
+spreadsheetId.addEventListener("input", () => {
+  saveSyncSettings();
+  updateSyncButtons();
+});
+
+sheetName.addEventListener("input", saveSyncSettings);
+syncAuthToken.addEventListener("input", () => {
+  saveSyncSettings();
+  updateSyncButtons();
+});
+
+// Pull data from Google Sheets
+pullBtn.addEventListener("click", async () => {
+  const id = spreadsheetId.value.trim();
+  const sheet = sheetName.value.trim() || "Sheet1";
+  const apiKey = syncAuthToken.value.trim();
+  
+  if (!id || !apiKey) {
+    syncStatus.textContent = "Please enter Spreadsheet ID and API Key";
+    syncStatus.style.color = "var(--muted)";
+    return;
+  }
+  
+  pullBtn.disabled = true;
+  pullBtn.textContent = "Pulling...";
+  syncStatus.textContent = "Pulling data from Google Sheets...";
+  syncStatus.style.color = "var(--muted)";
+  
+  try {
+    // Google Sheets API v4 - get all values from the sheet
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${sheet}?key=${apiKey}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
+    }
+    
+    if (!data.values || data.values.length === 0) {
+      throw new Error("Sheet is empty or doesn't exist");
+    }
+    
+    // Convert Google Sheets format (array of arrays) to Excel format
+    const headers = data.values[0];
+    const rows = data.values.slice(1);
+    
+    // Convert to Excel workbook format
+    const jsonData = rows.map(row => {
+      const obj = {};
+      headers.forEach((header, i) => {
+        obj[header] = row[i] || "";
+      });
+      return obj;
+    });
+    
+    // Create a workbook-like structure
+    const wb = {
+      SheetNames: [sheet],
+      Sheets: {}
+    };
+    
+    // Convert to worksheet format that loadSheet can use
+    const ws = XLSX.utils.json_to_sheet(jsonData);
+    wb.Sheets[sheet] = ws;
+    
+    // Load the sheet
+    loadSheet(wb, sheet);
+    syncStatus.textContent = `Successfully pulled ${jsonData.length} rows from ${sheet}`;
+    syncStatus.style.color = "var(--accent)";
+  } catch (error) {
+    syncStatus.textContent = `Error: ${error.message}`;
+    syncStatus.style.color = "#ef4444";
+    console.error("Pull error:", error);
+  } finally {
+    pullBtn.disabled = false;
+    pullBtn.textContent = "Pull Data";
+    updateSyncButtons();
+  }
+});
+
+// Push data to Google Sheets
+pushBtn.addEventListener("click", async () => {
+  const id = spreadsheetId.value.trim();
+  const sheet = sheetName.value.trim() || "Sheet1";
+  const apiKey = syncAuthToken.value.trim();
+  
+  if (!id || !apiKey) {
+    syncStatus.textContent = "Please enter Spreadsheet ID and API Key";
+    syncStatus.style.color = "var(--muted)";
+    return;
+  }
+  
+  if (allRows.length === 0) {
+    syncStatus.textContent = "No data to push";
+    syncStatus.style.color = "var(--muted)";
+    return;
+  }
+  
+  pushBtn.disabled = true;
+  pushBtn.textContent = "Pushing...";
+  syncStatus.textContent = "Pushing data to Google Sheets...";
+  syncStatus.style.color = "var(--muted)";
+  
+  try {
+    // Get all unique column names from all rows
+    const allColumns = new Set();
+    allRows.forEach(row => {
+      Object.keys(row).forEach(key => allColumns.add(key));
+    });
+    
+    // Ensure standard columns are first
+    const standardCols = ["Id", "Priority", "Project Name", "Project Description", "Date", 
+                           "Location Run", "User Email", "Project Id", "Chat Id", "Note"];
+    const otherCols = Array.from(allColumns).filter(col => !standardCols.includes(col));
+    
+    // Sort Q/R/N/Expected columns properly
+    const qCols = otherCols.filter(c => /^Q\d+$/i.test(c)).sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)[0]);
+      const numB = parseInt(b.match(/\d+/)[0]);
+      return numA - numB;
+    });
+    const rCols = otherCols.filter(c => /^R\d+$/i.test(c)).sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)[0]);
+      const numB = parseInt(b.match(/\d+/)[0]);
+      return numA - numB;
+    });
+    const nCols = otherCols.filter(c => /^N\d+$/i.test(c)).sort((a, b) => {
+      const numA = parseInt(a.match(/\d+/)[0]);
+      const numB = parseInt(b.match(/\d+/)[0]);
+      return numA - numB;
+    });
+    const expectedCols = otherCols.filter(c => /^Expected/i.test(c)).sort((a, b) => {
+      if (a === "Expected") return -1;
+      if (b === "Expected") return 1;
+      const numA = parseInt(a.match(/\d+/)?.[0]) || 0;
+      const numB = parseInt(b.match(/\d+/)?.[0]) || 0;
+      return numA - numB;
+    });
+    
+    // Interleave Q/R/N/Expected columns
+    const maxPairs = Math.max(qCols.length, rCols.length, nCols.length);
+    const interleavedCols = [];
+    for (let i = 0; i < maxPairs; i++) {
+      if (qCols[i]) interleavedCols.push(qCols[i]);
+      if (rCols[i]) interleavedCols.push(rCols[i]);
+      if (nCols[i]) interleavedCols.push(nCols[i]);
+      if (i === 0 && expectedCols.find(c => c === "Expected")) {
+        interleavedCols.push("Expected");
+      } else if (expectedCols.find(c => c === `Expected_${i}`)) {
+        interleavedCols.push(`Expected_${i}`);
+      }
+    }
+    
+    const orderedColumns = [...standardCols, ...interleavedCols];
+    
+    // Convert rows to Google Sheets format (array of arrays)
+    const values = [orderedColumns]; // Header row
+    
+    allRows.forEach(row => {
+      const rowData = orderedColumns.map(col => {
+        const value = row[col] || "";
+        
+        // For Date column, format as readable date string
+        if (col === "Date" && value) {
+          const excelDate = convertToExcelDate(value);
+          if (typeof excelDate === 'number') {
+            // Convert Excel serial to readable date
+            const excelEpoch = new Date(1899, 11, 30);
+            const date = new Date(excelEpoch.getTime() + excelDate * 24 * 60 * 60 * 1000);
+            if (date.getFullYear() >= 1900 && date.getFullYear() <= 2100) {
+              return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            }
+          }
+          return value;
+        }
+        
+        return String(value);
+      });
+      values.push(rowData);
+    });
+    
+    // Google Sheets API v4 - update values
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${sheet}?valueInputOption=RAW&key=${apiKey}`;
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        values: values
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
+    }
+    
+    syncStatus.textContent = `Successfully pushed ${allRows.length} rows to ${sheet}`;
+    syncStatus.style.color = "var(--accent)";
+  } catch (error) {
+    syncStatus.textContent = `Error: ${error.message}`;
+    syncStatus.style.color = "#ef4444";
+    console.error("Push error:", error);
+  } finally {
+    pushBtn.disabled = false;
+    pushBtn.textContent = "Push Data";
+    updateSyncButtons();
+  }
+});
+
+// Initialize sync settings after DOM is ready
+setTimeout(() => {
+  if (typeof loadSyncSettings === 'function') {
+    loadSyncSettings();
+  }
+}, 0);
+
+// Collapsible sync panel
+const syncToggle = el("syncToggle");
+const syncFormContainer = el("syncFormContainer");
+let syncFormExpanded = true;
+
+syncToggle.addEventListener("click", () => {
+  syncFormExpanded = !syncFormExpanded;
+  if (syncFormExpanded) {
+    syncFormContainer.style.display = "block";
+    syncToggle.textContent = "−";
+  } else {
+    syncFormContainer.style.display = "none";
+    syncToggle.textContent = "+";
+  }
+});
 
 // --- Collapsible forms ---
 const configEnvToggle = el("configEnvToggle");

@@ -177,6 +177,18 @@
     color: var(--muted);
   }
   
+  details summary {
+    user-select: none;
+  }
+  
+  details code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'Courier New', monospace;
+  }
+  
   #addChatForm button {
     width: 100%;
     margin-top: 8px;

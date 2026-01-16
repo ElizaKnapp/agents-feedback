@@ -24,6 +24,7 @@
 
       <div class="spacer"></div>
 
+      <button id="syncBtn" class="btn secondary" disabled title="Sync with remote file">Sync</button>
       <button id="downloadBtn" class="btn secondary" disabled>Download Excel</button>
     </header>
 
@@ -82,6 +83,56 @@
               </div>
               <button type="submit" class="btn" id="addChatBtn" disabled>Add Chat</button>
             </form>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header-collapsible">
+            <h3>Google Sheets Sync</h3>
+            <button class="collapse-btn" id="syncToggle">−</button>
+          </div>
+          <div id="syncFormContainer">
+            <div class="form-group">
+              <label for="spreadsheetId">Spreadsheet ID</label>
+              <input type="text" id="spreadsheetId" placeholder="From Google Sheets URL: /spreadsheets/d/{ID}/edit" />
+              <div class="hint">Extract from Google Sheets URL: docs.google.com/spreadsheets/d/[THIS_IS_THE_ID]/edit</div>
+            </div>
+            <div class="form-group">
+              <label for="sheetName">Sheet Name</label>
+              <input type="text" id="sheetName" placeholder="Sheet1" value="Sheet1" />
+              <div class="hint">Name of the sheet tab (default: Sheet1)</div>
+            </div>
+            <div class="form-group">
+              <label for="syncAuthToken">API Key or Access Token</label>
+              <input type="password" id="syncAuthToken" placeholder="Google API Key or OAuth Access Token" />
+              <div class="hint">Get from Google Cloud Console or OAuth flow</div>
+            </div>
+            <button class="btn secondary" id="pullBtn">Pull Data</button>
+            <button class="btn secondary" id="pushBtn" disabled>Push Data</button>
+            <div class="hint" id="syncStatus"></div>
+            <details style="margin-top: 10px; color: var(--muted); font-size: 11px;">
+              <summary style="cursor: pointer; color: var(--accent);">Setup Instructions</summary>
+              <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; line-height: 1.6;">
+                <p><strong>1. Get Spreadsheet ID</strong></p>
+                <p>Open your Google Sheet → Copy ID from URL:<br/>
+                <code>docs.google.com/spreadsheets/d/[THIS_IS_THE_ID]/edit</code></p>
+                
+                <p style="margin-top: 12px;"><strong>2. Get API Key</strong></p>
+                <p>1. Go to <a href="https://console.cloud.google.com" target="_blank" style="color: var(--accent);">Google Cloud Console</a><br/>
+                2. Create a new project (or select existing)<br/>
+                3. Enable "Google Sheets API"<br/>
+                4. Go to "Credentials" → "Create Credentials" → "API Key"<br/>
+                5. Copy the API key</p>
+                
+                <p style="margin-top: 12px;"><strong>3. Share Your Sheet</strong></p>
+                <p>In Google Sheets: Click "Share" → Make it accessible to "Anyone with the link" (Viewer) OR share with the service account email if using service account authentication.</p>
+                
+                <p style="margin-top: 12px;"><strong>4. Configure Here</strong></p>
+                <p>• Spreadsheet ID: Paste the ID from step 1<br/>
+                • Sheet Name: Usually "Sheet1" (check your tab name)<br/>
+                • API Key: Paste the key from step 2</p>
+              </div>
+            </details>
           </div>
         </div>
 
