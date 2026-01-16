@@ -1500,11 +1500,15 @@ pushBtn.addEventListener("click", async () => {
       };
       
       // Add data as hidden input
+      // Note: Form encoding happens automatically, don't double-encode
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = 'data';
       input.value = JSON.stringify(payload);
       form.appendChild(input);
+      
+      // Set form encoding explicitly
+      form.enctype = 'application/x-www-form-urlencoded';
       
       // Append to body and submit
       document.body.appendChild(iframe);

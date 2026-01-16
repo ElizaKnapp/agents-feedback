@@ -93,9 +93,15 @@ function doPost(e) {
     
     // Handle form data (URL-encoded from iframe form submission)
     if (e.parameter && e.parameter.data) {
-      // Form data comes URL-encoded, decode it first
-      const decodedData = decodeURIComponent(e.parameter.data);
-      data = JSON.parse(decodedData);
+      // Google Apps Script automatically URL-decodes parameters
+      // So e.parameter.data should already be decoded
+      try {
+        data = JSON.parse(e.parameter.data);
+      } catch (parseError) {
+        // If parsing fails, the data might still be encoded or malformed
+        // Log the error for debugging
+        throw new Error('Failed to parse JSON from form data: ' + parseError.toString() + '. Data preview: ' + String(e.parameter.data).substring(0, 200));
+      }
     }
     // Handle JSON POST (from fetch API)
     else if (e.postData && e.postData.contents) {
