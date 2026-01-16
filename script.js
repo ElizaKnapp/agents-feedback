@@ -31,9 +31,14 @@ const downloadBtn = el("downloadBtn");
 const spreadsheetId = el("spreadsheetId");
 const sheetName = el("sheetName");
 const syncAuthToken = el("syncAuthToken");
+const syncApiKey = el("syncApiKey");
+const scriptUrl = el("scriptUrl");
 const pullBtn = el("pullBtn");
 const pushBtn = el("pushBtn");
 const syncStatus = el("syncStatus");
+const syncMethodRadios = document.querySelectorAll('input[name="syncMethod"]');
+const oauthFields = el("oauthFields");
+const scriptFields = el("scriptFields");
 
 // --- Helpers ---
 function isBlank(v) {
@@ -1115,12 +1120,22 @@ downloadBtn.addEventListener("click", downloadExcel);
 function loadSyncSettings() {
   const savedSpreadsheetId = localStorage.getItem('spreadsheetId');
   const savedSheetName = localStorage.getItem('sheetName');
-  const savedApiKey = localStorage.getItem('syncAuthToken');
+  const savedToken = localStorage.getItem('syncAuthToken');
+  const savedApiKey = localStorage.getItem('syncApiKey');
+  const savedScriptUrl = localStorage.getItem('scriptUrl');
+  const savedSyncMethod = localStorage.getItem('syncMethod') || 'oauth';
   
   if (savedSpreadsheetId) spreadsheetId.value = savedSpreadsheetId;
   if (savedSheetName) sheetName.value = savedSheetName;
-  if (savedApiKey) syncAuthToken.value = savedApiKey;
+  if (savedToken) syncAuthToken.value = savedToken;
+  if (savedApiKey) syncApiKey.value = savedApiKey;
+  if (savedScriptUrl) scriptUrl.value = savedScriptUrl;
   
+  // Set radio button
+  syncMethodRadios.forEach(radio => {
+    if (radio.value === savedSyncMethod) radio.checked = true;
+  });
+  updateSyncMethodUI();
   updateSyncButtons();
 }
 
@@ -1128,13 +1143,49 @@ function saveSyncSettings() {
   if (spreadsheetId.value) localStorage.setItem('spreadsheetId', spreadsheetId.value);
   if (sheetName.value) localStorage.setItem('sheetName', sheetName.value);
   if (syncAuthToken.value) localStorage.setItem('syncAuthToken', syncAuthToken.value);
+  if (syncApiKey.value) localStorage.setItem('syncApiKey', syncApiKey.value);
+  if (scriptUrl.value) localStorage.setItem('scriptUrl', scriptUrl.value);
+  const selectedMethod = document.querySelector('input[name="syncMethod"]:checked')?.value || 'oauth';
+  localStorage.setItem('syncMethod', selectedMethod);
+}
+
+function updateSyncMethodUI() {
+  const selectedMethod = document.querySelector('input[name="syncMethod"]:checked')?.value || 'oauth';
+  if (selectedMethod === 'oauth') {
+    oauthFields.style.display = 'block';
+    scriptFields.style.display = 'none';
+  } else {
+    oauthFields.style.display = 'none';
+    scriptFields.style.display = 'block';
+  }
 }
 
 function updateSyncButtons() {
-  const hasConfig = spreadsheetId.value.trim() !== "" && syncAuthToken.value.trim() !== "";
-  pullBtn.disabled = !hasConfig;
-  pushBtn.disabled = !hasConfig || allRows.length === 0;
+  const hasSpreadsheetId = spreadsheetId.value.trim() !== "";
+  const selectedMethod = document.querySelector('input[name="syncMethod"]:checked')?.value || 'oauth';
+  const hasToken = syncAuthToken.value.trim() !== "";
+  const hasApiKey = syncApiKey.value.trim() !== "";
+  const hasScriptUrl = scriptUrl.value.trim() !== "";
+  
+  // Pull works with either API key (public sheets) or OAuth token
+  pullBtn.disabled = !hasSpreadsheetId || (!hasToken && !hasApiKey);
+  
+  // Push requires OAuth token OR script URL
+  if (selectedMethod === 'oauth') {
+    pushBtn.disabled = !hasSpreadsheetId || !hasToken || allRows.length === 0;
+  } else {
+    pushBtn.disabled = !hasSpreadsheetId || !hasScriptUrl || allRows.length === 0;
+  }
 }
+
+// Sync method radio button handler
+syncMethodRadios.forEach(radio => {
+  radio.addEventListener('change', () => {
+    updateSyncMethodUI();
+    saveSyncSettings();
+    updateSyncButtons();
+  });
+});
 
 spreadsheetId.addEventListener("input", () => {
   saveSyncSettings();
@@ -1146,15 +1197,30 @@ syncAuthToken.addEventListener("input", () => {
   saveSyncSettings();
   updateSyncButtons();
 });
+syncApiKey.addEventListener("input", () => {
+  saveSyncSettings();
+  updateSyncButtons();
+});
+scriptUrl.addEventListener("input", () => {
+  saveSyncSettings();
+  updateSyncButtons();
+});
 
 // Pull data from Google Sheets
 pullBtn.addEventListener("click", async () => {
   const id = spreadsheetId.value.trim();
   const sheet = sheetName.value.trim() || "Sheet1";
-  const apiKey = syncAuthToken.value.trim();
+  const token = syncAuthToken.value.trim();
+  const apiKey = syncApiKey.value.trim();
   
-  if (!id || !apiKey) {
-    syncStatus.textContent = "Please enter Spreadsheet ID and API Key";
+  if (!id) {
+    syncStatus.textContent = "Please enter Spreadsheet ID";
+    syncStatus.style.color = "var(--muted)";
+    return;
+  }
+  
+  if (!token && !apiKey) {
+    syncStatus.textContent = "Please enter OAuth Token or API Key";
     syncStatus.style.color = "var(--muted)";
     return;
   }
@@ -1166,9 +1232,20 @@ pullBtn.addEventListener("click", async () => {
   
   try {
     // Google Sheets API v4 - get all values from the sheet
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${sheet}?key=${apiKey}`;
+    // Use OAuth token if available, otherwise use API key
+    let url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${sheet}`;
+    if (token) {
+      url += `?access_token=${token}`;
+    } else {
+      url += `?key=${apiKey}`;
+    }
     
-    const response = await fetch(url);
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const response = await fetch(url, { headers });
     const data = await response.json();
     
     if (!response.ok) {
@@ -1180,13 +1257,13 @@ pullBtn.addEventListener("click", async () => {
     }
     
     // Convert Google Sheets format (array of arrays) to Excel format
-    const headers = data.values[0];
+    const headers_row = data.values[0];
     const rows = data.values.slice(1);
     
     // Convert to Excel workbook format
     const jsonData = rows.map(row => {
       const obj = {};
-      headers.forEach((header, i) => {
+      headers_row.forEach((header, i) => {
         obj[header] = row[i] || "";
       });
       return obj;
@@ -1221,10 +1298,24 @@ pullBtn.addEventListener("click", async () => {
 pushBtn.addEventListener("click", async () => {
   const id = spreadsheetId.value.trim();
   const sheet = sheetName.value.trim() || "Sheet1";
-  const apiKey = syncAuthToken.value.trim();
+  const selectedMethod = document.querySelector('input[name="syncMethod"]:checked')?.value || 'oauth';
+  const token = syncAuthToken.value.trim();
+  const scriptUrlValue = scriptUrl.value.trim();
   
-  if (!id || !apiKey) {
-    syncStatus.textContent = "Please enter Spreadsheet ID and API Key";
+  if (!id) {
+    syncStatus.textContent = "Please enter Spreadsheet ID";
+    syncStatus.style.color = "var(--muted)";
+    return;
+  }
+  
+  if (selectedMethod === 'oauth' && !token) {
+    syncStatus.textContent = "Please enter OAuth Token";
+    syncStatus.style.color = "var(--muted)";
+    return;
+  }
+  
+  if (selectedMethod === 'script' && !scriptUrlValue) {
+    syncStatus.textContent = "Please enter Apps Script URL";
     syncStatus.style.color = "var(--muted)";
     return;
   }
@@ -1318,23 +1409,43 @@ pushBtn.addEventListener("click", async () => {
       values.push(rowData);
     });
     
-    // Google Sheets API v4 - update values
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${sheet}?valueInputOption=RAW&key=${apiKey}`;
+    let response, data;
     
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        values: values
-      })
-    });
-    
-    const data = await response.json();
+    if (selectedMethod === 'script') {
+      // Use Google Apps Script web app (no OAuth needed)
+      response = await fetch(scriptUrlValue, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          spreadsheetId: id,
+          sheetName: sheet,
+          values: values
+        })
+      });
+      
+      data = await response.json();
+    } else {
+      // Use direct Google Sheets API (requires OAuth)
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${sheet}?valueInputOption=RAW`;
+      
+      response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          values: values
+        })
+      });
+      
+      data = await response.json();
+    }
     
     if (!response.ok) {
-      throw new Error(data.error?.message || `HTTP error! status: ${response.status}`);
+      throw new Error(data.error?.message || data.message || `HTTP error! status: ${response.status}`);
     }
     
     syncStatus.textContent = `Successfully pushed ${allRows.length} rows to ${sheet}`;
