@@ -33,7 +33,6 @@ const sheetName = el("sheetName");
 const syncApiKey = el("syncApiKey");
 const scriptUrl = el("scriptUrl");
 const pullBtn = el("pullBtn");
-const testPushBtn = el("testPushBtn");
 const pushBtn = el("pushBtn");
 const syncStatus = el("syncStatus");
 
@@ -1143,9 +1142,6 @@ function updateSyncButtons() {
   // Pull requires API key
   pullBtn.disabled = !hasSpreadsheetId || !hasApiKey;
   
-  // Test endpoint requires script URL
-  testPushBtn.disabled = !hasScriptUrl;
-  
   // Push requires script URL and data
   pushBtn.disabled = !hasSpreadsheetId || !hasScriptUrl || allRows.length === 0;
 }
@@ -1243,64 +1239,6 @@ pullBtn.addEventListener("click", async () => {
   } finally {
     pullBtn.disabled = false;
     pullBtn.textContent = "Pull Data";
-    updateSyncButtons();
-  }
-});
-
-// Test Apps Script endpoint
-testPushBtn.addEventListener("click", async () => {
-  const scriptUrlValue = scriptUrl.value.trim();
-  
-  if (!scriptUrlValue) {
-    syncStatus.textContent = "Please enter Apps Script URL";
-    syncStatus.style.color = "#ef4444";
-    return;
-  }
-  
-  testPushBtn.disabled = true;
-  testPushBtn.textContent = "Testing...";
-  syncStatus.textContent = "Testing endpoint...";
-  syncStatus.style.color = "var(--muted)";
-  
-  try {
-    let scriptUrlTest = scriptUrlValue.trim();
-    if (!scriptUrlTest.endsWith('/exec') && !scriptUrlTest.endsWith('/dev')) {
-      scriptUrlTest = scriptUrlTest.replace(/\/$/, '') + '/exec';
-    }
-    
-    console.log("Testing endpoint:", scriptUrlTest);
-    
-    // Test GET request
-    const response = await fetch(scriptUrlTest, {
-      method: 'GET',
-      mode: 'cors',
-      credentials: 'omit'
-    });
-    
-    console.log("Test response:", response.status, response.type);
-    
-    if (response.ok) {
-      const text = await response.text();
-      console.log("Test response text:", text);
-      try {
-        const data = JSON.parse(text);
-        syncStatus.textContent = `✓ Endpoint works! Response: ${data.message || 'OK'}`;
-        syncStatus.style.color = "var(--accent)";
-      } catch (e) {
-        syncStatus.textContent = `✓ Endpoint accessible (status: ${response.status})`;
-        syncStatus.style.color = "var(--accent)";
-      }
-    } else {
-      throw new Error(`HTTP ${response.status}`);
-    }
-  } catch (error) {
-    const errorMsg = error.message || String(error);
-    syncStatus.textContent = `✗ Endpoint test failed: ${errorMsg}. Check deployment settings (must be "Anyone" access).`;
-    syncStatus.style.color = "#ef4444";
-    console.error("Test error:", error);
-  } finally {
-    testPushBtn.disabled = false;
-    testPushBtn.textContent = "Test Endpoint";
     updateSyncButtons();
   }
 });
@@ -1527,8 +1465,17 @@ pushBtn.addEventListener("click", async () => {
       }, 30000); // 30 second timeout
     });
     
-    syncStatus.textContent = `Successfully pushed ${allRows.length} rows to ${sheet}`;
+    // Show success message
+    syncStatus.textContent = `✓ Successfully pushed ${allRows.length} rows to "${sheet}" in Google Sheets`;
     syncStatus.style.color = "var(--accent)";
+    syncStatus.style.fontWeight = "500";
+    
+    // Keep success message visible for 5 seconds, then clear
+    setTimeout(() => {
+      if (syncStatus.textContent.includes("Successfully pushed")) {
+        syncStatus.textContent = "";
+      }
+    }, 5000);
   } catch (error) {
     const errorMsg = error.message || String(error);
     syncStatus.textContent = `Error: ${errorMsg}`;
