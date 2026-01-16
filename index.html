@@ -91,26 +91,23 @@ function doPost(e) {
   try {
     let data;
     
-    // Handle both form data and JSON
-    if (e.postData && e.postData.contents) {
+    // Handle form data (URL-encoded from iframe form submission)
+    if (e.parameter && e.parameter.data) {
+      // Form data comes URL-encoded, decode it first
+      const decodedData = decodeURIComponent(e.parameter.data);
+      data = JSON.parse(decodedData);
+    }
+    // Handle JSON POST (from fetch API)
+    else if (e.postData && e.postData.contents) {
       const contentType = e.postData.type || '';
       if (contentType.indexOf('application/json') !== -1) {
         data = JSON.parse(e.postData.contents);
-      } else if (contentType.indexOf('multipart/form-data') !== -1 || contentType.indexOf('application/x-www-form-urlencoded') !== -1) {
-        // Handle form data
-        if (e.parameter && e.parameter.data) {
-          data = JSON.parse(e.parameter.data);
-        } else {
-          throw new Error('Form data format not recognized');
-        }
       } else {
         // Try to parse as JSON anyway
         data = JSON.parse(e.postData.contents);
       }
-    } else if (e.parameter && e.parameter.data) {
-      data = JSON.parse(e.parameter.data);
     } else {
-      throw new Error('No data received');
+      throw new Error('No data received. Make sure data is sent as form field "data"');
     }
     
     const ss = SpreadsheetApp.openById(data.spreadsheetId);
