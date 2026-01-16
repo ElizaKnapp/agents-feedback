@@ -77,21 +77,41 @@
                 2. Go to Extensions → Apps Script<br/>
                 3. Paste this code:</p>
                 <pre style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-size: 10px; overflow-x: auto; margin: 4px 0;">
+// Handle GET requests (for testing/CORS preflight)
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    message: 'Apps Script endpoint is active. Use POST to push data.'
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Handle POST requests (for pushing data)
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.openById(data.spreadsheetId);
     const sheet = ss.getSheetByName(data.sheetName) || ss.getActiveSheet();
+    
+    if (!sheet) {
+      throw new Error('Sheet not found: ' + data.sheetName);
+    }
+    
     sheet.clear();
     if (data.values && data.values.length > 0) {
-      sheet.getRange(1, 1, data.values.length, data.values[0].length).setValues(data.values);
+      const numRows = data.values.length;
+      const numCols = data.values[0].length;
+      sheet.getRange(1, 1, numRows, numCols).setValues(data.values);
     }
-    return ContentService.createTextOutput(JSON.stringify({success: true}))
-      .setMimeType(ContentService.MimeType.JSON);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      rows: data.values ? data.values.length : 0
+    })).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
-      error: error.toString()
+      error: error.toString(),
+      message: error.message || 'Unknown error'
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }</pre>
@@ -109,7 +129,16 @@ function doPost(e) {
                 <p>• Spreadsheet ID: Paste from step 1<br/>
                 • Sheet Name: Usually "Sheet1"<br/>
                 • API Key: Paste from step 2 (for Pull)<br/>
-                • Apps Script URL: Paste from step 3 (for Push)</p>
+                • Apps Script URL: Paste from step 3 (for Push)<br/>
+                <strong>Note:</strong> The Apps Script URL should end with <code>/exec</code> (e.g., <code>https://script.google.com/macros/s/.../exec</code>)</p>
+                
+                <p style="margin-top: 12px;"><strong>6. Troubleshooting Push Errors</strong></p>
+                <p>If you get "Failed to fetch" or other errors:<br/>
+                • Make sure the Apps Script is deployed with "Anyone" access<br/>
+                • Check the browser console (F12) for detailed error messages<br/>
+                • Verify the Apps Script URL ends with <code>/exec</code><br/>
+                • Try redeploying the Apps Script after updating the code<br/>
+                • Ensure the Spreadsheet ID matches the sheet where the Apps Script is installed</p>
               </div>
             </details>
           </div>

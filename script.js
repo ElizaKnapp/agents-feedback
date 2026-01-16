@@ -1351,23 +1351,43 @@ pushBtn.addEventListener("click", async () => {
     });
     
     // Use Google Apps Script web app (no OAuth needed)
-    const response = await fetch(scriptUrlValue, {
+    // Ensure URL ends with /exec for proper Apps Script handling
+    let scriptUrl = scriptUrlValue.trim();
+    if (!scriptUrl.endsWith('/exec') && !scriptUrl.endsWith('/dev')) {
+      scriptUrl = scriptUrl.replace(/\/$/, '') + '/exec';
+    }
+    
+    syncStatus.textContent = `Pushing ${allRows.length} rows...`;
+    syncStatus.style.color = "var(--muted)";
+    
+    const payload = {
+      spreadsheetId: id,
+      sheetName: sheet,
+      values: values
+    };
+    
+    console.log("Pushing to:", scriptUrl);
+    console.log("Payload size:", JSON.stringify(payload).length, "bytes");
+    
+    const response = await fetch(scriptUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        spreadsheetId: id,
-        sheetName: sheet,
-        values: values
-      })
+      body: JSON.stringify(payload)
     });
     
+    console.log("Response status:", response.status);
+    console.log("Response headers:", [...response.headers.entries()]);
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error("Error response:", errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText || 'Unknown error'}`);
     }
     
     const data = await response.json();
+    console.log("Response data:", data);
     
     if (data.error || (data.success === false)) {
       throw new Error(data.error || data.message || 'Push failed');
@@ -1376,9 +1396,14 @@ pushBtn.addEventListener("click", async () => {
     syncStatus.textContent = `Successfully pushed ${allRows.length} rows to ${sheet}`;
     syncStatus.style.color = "var(--accent)";
   } catch (error) {
-    syncStatus.textContent = `Error: ${error.message}`;
+    const errorMsg = error.message || String(error);
+    syncStatus.textContent = `Error: ${errorMsg}`;
     syncStatus.style.color = "#ef4444";
-    console.error("Push error:", error);
+    console.error("Push error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
   } finally {
     pushBtn.disabled = false;
     pushBtn.textContent = "Push Data";
