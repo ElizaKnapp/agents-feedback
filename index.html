@@ -56,6 +56,7 @@
               <div class="hint">Required for pushing data. Deploy Apps Script as web app (see instructions).</div>
             </div>
             <button class="btn secondary" id="pullBtn">Pull Data</button>
+            <button class="btn secondary" id="testPushBtn" disabled>Test Endpoint</button>
             <button class="btn secondary" id="pushBtn" disabled>Push Data</button>
             <div class="hint" id="syncStatus"></div>
             <details style="margin-top: 10px; color: var(--muted); font-size: 11px;">
@@ -88,7 +89,30 @@ function doGet(e) {
 // Handle POST requests (for pushing data)
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
+    let data;
+    
+    // Handle both form data and JSON
+    if (e.postData && e.postData.contents) {
+      const contentType = e.postData.type || '';
+      if (contentType.indexOf('application/json') !== -1) {
+        data = JSON.parse(e.postData.contents);
+      } else if (contentType.indexOf('multipart/form-data') !== -1 || contentType.indexOf('application/x-www-form-urlencoded') !== -1) {
+        // Handle form data
+        if (e.parameter && e.parameter.data) {
+          data = JSON.parse(e.parameter.data);
+        } else {
+          throw new Error('Form data format not recognized');
+        }
+      } else {
+        // Try to parse as JSON anyway
+        data = JSON.parse(e.postData.contents);
+      }
+    } else if (e.parameter && e.parameter.data) {
+      data = JSON.parse(e.parameter.data);
+    } else {
+      throw new Error('No data received');
+    }
+    
     const ss = SpreadsheetApp.openById(data.spreadsheetId);
     const sheet = ss.getSheetByName(data.sheetName) || ss.getActiveSheet();
     
@@ -103,16 +127,20 @@ function doPost(e) {
       sheet.getRange(1, 1, numRows, numCols).setValues(data.values);
     }
     
-    return ContentService.createTextOutput(JSON.stringify({
+    const output = ContentService.createTextOutput(JSON.stringify({
       success: true,
       rows: data.values ? data.values.length : 0
-    })).setMimeType(ContentService.MimeType.JSON);
+    }));
+    output.setMimeType(ContentService.MimeType.JSON);
+    return output;
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
+    const output = ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: error.toString(),
       message: error.message || 'Unknown error'
-    })).setMimeType(ContentService.MimeType.JSON);
+    }));
+    output.setMimeType(ContentService.MimeType.JSON);
+    return output;
   }
 }</pre>
                 <p>4. Click "Deploy" → "New deployment"<br/>
@@ -133,12 +161,14 @@ function doPost(e) {
                 <strong>Note:</strong> The Apps Script URL should end with <code>/exec</code> (e.g., <code>https://script.google.com/macros/s/.../exec</code>)</p>
                 
                 <p style="margin-top: 12px;"><strong>6. Troubleshooting Push Errors</strong></p>
-                <p>If you get "Failed to fetch" or other errors:<br/>
-                • Make sure the Apps Script is deployed with "Anyone" access<br/>
+                <p>If you get "Failed to fetch" or CORS errors:<br/>
+                • <strong>CRITICAL:</strong> Make sure the Apps Script is deployed with "Who has access" set to <strong>"Anyone"</strong> (not "Only myself")<br/>
+                • After changing access settings, you MUST redeploy (create a new deployment or update existing one)<br/>
+                • Test the URL directly in your browser - it should show: <code>{"success":true,"message":"..."}</code><br/>
                 • Check the browser console (F12) for detailed error messages<br/>
                 • Verify the Apps Script URL ends with <code>/exec</code><br/>
-                • Try redeploying the Apps Script after updating the code<br/>
-                • Ensure the Spreadsheet ID matches the sheet where the Apps Script is installed</p>
+                • Ensure the Spreadsheet ID matches the sheet where the Apps Script is installed<br/>
+                • <strong>Note:</strong> If hosting on GitHub Pages, CORS restrictions may apply. Consider testing locally first.</p>
               </div>
             </details>
           </div>
