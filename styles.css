@@ -252,6 +252,31 @@
   .rowtitle { font-weight: 600; }
   .rowsub { color: var(--muted); font-size: 12px; margin-top: 4px; }
   
+  .delete-row-btn {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, border-color 0.2s;
+    flex-shrink: 0;
+  }
+  .delete-row-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: #ef4444;
+  }
+  .delete-row-btn:active {
+    background: rgba(239, 68, 68, 0.4);
+  }
+  
   .meta {
     color: var(--muted);
     font-size: 13px;

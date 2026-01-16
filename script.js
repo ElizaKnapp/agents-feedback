@@ -257,9 +257,29 @@ function renderRowList(rows) {
     const item = document.createElement("div");
     item.className = "rowitem" + (i === activeIndex ? " active" : "");
 
+    const titleRow = document.createElement("div");
+    titleRow.style.display = "flex";
+    titleRow.style.justifyContent = "space-between";
+    titleRow.style.alignItems = "center";
+    titleRow.style.gap = "8px";
+
     const title = document.createElement("div");
     title.className = "rowtitle";
     title.textContent = getRowTitle(row);
+    title.style.flex = "1";
+
+    // Delete button
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "×";
+    deleteBtn.className = "delete-row-btn";
+    deleteBtn.title = "Delete row";
+    deleteBtn.onclick = (e) => {
+      e.stopPropagation(); // Prevent row selection when clicking delete
+      deleteRow(row);
+    };
+
+    titleRow.appendChild(title);
+    titleRow.appendChild(deleteBtn);
 
     const sub = document.createElement("div");
     sub.className = "rowsub";
@@ -269,7 +289,7 @@ function renderRowList(rows) {
     if (!isBlank(row["User Email"])) parts.push(row["User Email"]);
     sub.textContent = parts.length > 0 ? parts.join(" • ") : "No metadata";
 
-    item.appendChild(title);
+    item.appendChild(titleRow);
     item.appendChild(sub);
 
     item.onclick = () => {
@@ -287,6 +307,72 @@ function renderRowList(rows) {
     renderRowList(rows);
     renderChat(rows[0]);
   }
+}
+
+function deleteRow(rowToDelete) {
+  // Find the row in allRows by comparing all properties
+  const indexInAllRows = allRows.findIndex(row => {
+    // Compare by Id if available, otherwise compare all properties
+    if (rowToDelete["Id"] && row["Id"]) {
+      return rowToDelete["Id"] === row["Id"];
+    }
+    // Fallback: compare all key-value pairs
+    const keys = Object.keys(rowToDelete);
+    return keys.every(key => rowToDelete[key] === row[key]);
+  });
+
+  if (indexInAllRows === -1) {
+    console.error("Row not found in allRows");
+    return;
+  }
+
+  // Remove from allRows
+  allRows.splice(indexInAllRows, 1);
+
+  // Re-apply filters and update UI
+  const afterFilter = applyFilters(allRows);
+  filteredRows = afterFilter;
+
+  // Update activeIndex if needed
+  if (activeIndex !== null) {
+    // If we deleted the active row or a row before it, adjust index
+    const deletedIndexInFiltered = filteredRows.findIndex(row => {
+      if (rowToDelete["Id"] && row["Id"]) {
+        return rowToDelete["Id"] === row["Id"];
+      }
+      const keys = Object.keys(rowToDelete);
+      return keys.every(key => rowToDelete[key] === row[key]);
+    });
+
+    if (deletedIndexInFiltered === activeIndex) {
+      // Deleted the active row - select the next one, or previous if at end
+      if (filteredRows.length > 0) {
+        activeIndex = Math.min(activeIndex, filteredRows.length - 1);
+      } else {
+        activeIndex = null;
+      }
+    } else if (deletedIndexInFiltered < activeIndex) {
+      // Deleted a row before the active one - decrement index
+      activeIndex--;
+    }
+  }
+
+  // Re-render
+  renderRowList(filteredRows);
+  
+  // If there's still an active row, render it
+  if (activeIndex !== null && filteredRows.length > 0 && activeIndex < filteredRows.length) {
+    renderChat(filteredRows[activeIndex]);
+  } else {
+    // Clear chat display
+    chat.innerHTML = "";
+    meta.innerHTML = "";
+    currentRow = null;
+    activeIndex = null;
+  }
+
+  // Update filters (in case deleted row was the last with a certain value)
+  buildFilters();
 }
 
 let currentRow = null; // Store reference to currently displayed row
